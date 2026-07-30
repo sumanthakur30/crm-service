@@ -109,38 +109,34 @@ public class CampaignService {
     }
 
     TenantContextFilter.bindTenant(campaign.getTenantId());
-    try {
-      String source =
-          firstNonBlank(body.utmSource(), campaign.getUtmSource(), campaign.getChannel(), "CAMPAIGN");
-      return leadService.create(
-          new LeadUpsert(
-              body.title(),
-              body.displayName(),
-              body.companyName(),
-              body.email(),
-              body.phone(),
-              source,
-              "OPEN",
-              "MEDIUM",
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              body.attributes(),
-              null,
-              "public-capture",
-              campaign.getId(),
-              firstNonBlank(body.utmSource(), campaign.getUtmSource()),
-              firstNonBlank(body.utmMedium(), campaign.getUtmMedium()),
-              firstNonBlank(body.utmCampaign(), campaign.getUtmCampaign()),
-              firstNonBlank(body.utmContent(), campaign.getUtmContent()),
-              firstNonBlank(body.utmTerm(), campaign.getUtmTerm())));
-    } finally {
-      TenantContextFilter.clearTenantForTests();
-    }
+    String source =
+        firstNonBlank(body.utmSource(), campaign.getUtmSource(), campaign.getChannel(), "CAMPAIGN");
+    return leadService.create(
+        new LeadUpsert(
+            body.title(),
+            body.displayName(),
+            body.companyName(),
+            body.email(),
+            body.phone(),
+            source,
+            "OPEN",
+            "MEDIUM",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            body.attributes(),
+            null,
+            "public-capture",
+            campaign.getId(),
+            firstNonBlank(body.utmSource(), campaign.getUtmSource()),
+            firstNonBlank(body.utmMedium(), campaign.getUtmMedium()),
+            firstNonBlank(body.utmCampaign(), campaign.getUtmCampaign()),
+            firstNonBlank(body.utmContent(), campaign.getUtmContent()),
+            firstNonBlank(body.utmTerm(), campaign.getUtmTerm())));
   }
 
   private CrmCampaignEntity require(String tenantId, Long id) {
