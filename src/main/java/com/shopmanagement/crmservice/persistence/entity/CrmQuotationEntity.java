@@ -39,8 +39,18 @@ public class CrmQuotationEntity extends TenantAuditableEntity {
   @Column(name = "version_no", nullable = false)
   private int versionNo = 1;
 
+  @Column(name = "parent_quotation_id")
+  private Long parentQuotationId;
+
   @Column(nullable = false, length = 32)
   private String status = "DRAFT";
+
+  /** NONE | PENDING | APPROVED | REJECTED */
+  @Column(name = "approval_status", nullable = false, length = 16)
+  private String approvalStatus = "NONE";
+
+  @Column(name = "approval_id")
+  private Long approvalId;
 
   @Column(name = "customer_name", length = 256)
   private String customerName;

@@ -118,7 +118,9 @@ public class LeadImportService {
                 first(row, "utm_medium"),
                 first(row, "utm_campaign"),
                 first(row, "utm_content"),
-                first(row, "utm_term"));
+                first(row, "utm_term"),
+                parseLong(first(row, "account_id")),
+                parseLong(first(row, "contact_id")));
         LeadResponse lead = leadService.create(upsert);
         if (assignRoundRobin) {
           assignmentService.assign(

@@ -176,7 +176,9 @@ public class InboundAdapterService {
             "paid",
             firstString(payload, "campaign_name"),
             firstString(payload, "ad_name"),
-            firstString(payload, "keyword")));
+            firstString(payload, "keyword"),
+            null,
+            null));
   }
 
   private LeadResponse mapMissedCall(Map<String, Object> payload) {
@@ -206,6 +208,8 @@ public class InboundAdapterService {
                 null,
                 "telephony",
                 "missed_call",
+                null,
+                null,
                 null,
                 null,
                 null));
@@ -272,6 +276,8 @@ public class InboundAdapterService {
             campaignId,
             "chatbot",
             "conversation",
+            null,
+            null,
             null,
             null,
             null));

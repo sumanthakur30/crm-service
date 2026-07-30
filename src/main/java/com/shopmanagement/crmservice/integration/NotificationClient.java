@@ -35,16 +35,32 @@ public class NotificationClient {
     return properties.isEnabled();
   }
 
-  /**
-   * Queues a notification via notification-service.
-   *
-   * @return delivery info map (status, notificationId, …)
-   */
+  public CrmNotificationProperties properties() {
+    return properties;
+  }
+
+  /** Queues a raw notification (subject/body). */
   public Map<String, Object> queue(
       String tenantId, String channel, String recipient, String subject, String body, String idempotencyKey) {
+    return queue(tenantId, channel, recipient, subject, body, idempotencyKey, null, null);
+  }
+
+  /** Queues via optional gallery {@code templateCode} + variables (notification-service resolves). */
+  public Map<String, Object> queue(
+      String tenantId,
+      String channel,
+      String recipient,
+      String subject,
+      String body,
+      String idempotencyKey,
+      String templateCode,
+      Map<String, String> variables) {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("channel", channel);
     result.put("recipient", recipient);
+    if (templateCode != null && !templateCode.isBlank()) {
+      result.put("templateCode", templateCode.trim());
+    }
 
     if (!properties.isEnabled()) {
       result.put("status", "SKIPPED_DISABLED");
@@ -59,10 +75,16 @@ public class NotificationClient {
     payload.put("recipient", recipient);
     payload.put("subject", subject);
     payload.put("body", body);
+    if (templateCode != null && !templateCode.isBlank()) {
+      payload.put("templateCode", templateCode.trim());
+    }
+    if (variables != null && !variables.isEmpty()) {
+      payload.put("variables", variables);
+    }
     payload.put(
         "idempotencyKey",
         idempotencyKey == null || idempotencyKey.isBlank()
-            ? "crm-quote-" + UUID.randomUUID()
+            ? "crm-notify-" + UUID.randomUUID()
             : idempotencyKey);
 
     HttpHeaders headers = new HttpHeaders();

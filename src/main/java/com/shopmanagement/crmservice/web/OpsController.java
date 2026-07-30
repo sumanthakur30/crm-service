@@ -54,20 +54,20 @@ public class OpsController {
 
   @PostMapping("/approvals")
   public Map<String, Object> requestApproval(@RequestBody Map<String, Object> body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireApprovalAccess();
     return opsService.requestApproval(body);
   }
 
   @GetMapping("/approvals")
   public List<Map<String, Object>> approvals(@RequestParam(required = false) String status) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireApprovalAccess();
     return opsService.listApprovals(status);
   }
 
   @PostMapping("/approvals/{id}/decide")
   public Map<String, Object> decide(
       @PathVariable Long id, @RequestParam boolean approve, @RequestParam(required = false) String note) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireApprovalAccess();
     return opsService.decideApproval(id, approve, note);
   }
 

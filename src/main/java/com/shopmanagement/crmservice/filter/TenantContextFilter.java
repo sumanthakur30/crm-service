@@ -20,10 +20,12 @@ public class TenantContextFilter extends OncePerRequestFilter {
 
   public static final String REQUEST_ID_HEADER = "X-Request-Id";
   public static final String TENANT_ID_HEADER = "X-Tenant-Id";
+  public static final String SHOP_ID_HEADER = "X-Shop-Id";
   public static final String USER_ID_HEADER = "X-User-Id";
   public static final String REQUEST_ID_MDC_KEY = "requestId";
 
   private static final ThreadLocal<String> CURRENT_TENANT = new ThreadLocal<>();
+  private static final ThreadLocal<String> CURRENT_SHOP = new ThreadLocal<>();
   private static final ThreadLocal<String> CURRENT_USER = new ThreadLocal<>();
 
   @Override
@@ -47,6 +49,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
           return;
         }
         CURRENT_TENANT.set(tenantId.trim());
+        String shopId = request.getHeader(SHOP_ID_HEADER);
+        if (shopId != null && !shopId.isBlank()) {
+          CURRENT_SHOP.set(shopId.trim());
+        }
         String userId = request.getHeader(USER_ID_HEADER);
         if (userId != null && !userId.isBlank()) {
           CURRENT_USER.set(userId.trim());
@@ -56,12 +62,17 @@ public class TenantContextFilter extends OncePerRequestFilter {
     } finally {
       MDC.remove(REQUEST_ID_MDC_KEY);
       CURRENT_TENANT.remove();
+      CURRENT_SHOP.remove();
       CURRENT_USER.remove();
     }
   }
 
   public static String getCurrentTenantId() {
     return CURRENT_TENANT.get();
+  }
+
+  public static String getCurrentShopId() {
+    return CURRENT_SHOP.get();
   }
 
   public static String getCurrentUserId() {
@@ -74,8 +85,14 @@ public class TenantContextFilter extends OncePerRequestFilter {
   }
 
   /** Test hook — do not use in production request paths. */
+  public static void bindShopForTests(String shopId) {
+    CURRENT_SHOP.set(shopId);
+  }
+
+  /** Test hook — do not use in production request paths. */
   public static void clearTenantForTests() {
     CURRENT_TENANT.remove();
+    CURRENT_SHOP.remove();
     CURRENT_USER.remove();
   }
 

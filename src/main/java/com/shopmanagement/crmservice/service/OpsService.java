@@ -34,6 +34,7 @@ public class OpsService {
   private final CrmOpportunityRepository opportunityRepository;
   private final TimelineService timelineService;
   private final BehaviorScoringService scoringService;
+  private final QuotationService quotationService;
 
   public OpsService(
       CrmCalendarEventRepository calendarRepository,
@@ -41,13 +42,15 @@ public class OpsService {
       CrmApprovalRepository approvalRepository,
       CrmOpportunityRepository opportunityRepository,
       TimelineService timelineService,
-      BehaviorScoringService scoringService) {
+      BehaviorScoringService scoringService,
+      QuotationService quotationService) {
     this.calendarRepository = calendarRepository;
     this.callLogRepository = callLogRepository;
     this.approvalRepository = approvalRepository;
     this.opportunityRepository = opportunityRepository;
     this.timelineService = timelineService;
     this.scoringService = scoringService;
+    this.quotationService = quotationService;
   }
 
   @Transactional
@@ -161,7 +164,11 @@ public class OpsService {
     a.setDecisionNote(note);
     a.setDecidedAt(Instant.now());
     a.setUpdatedAt(Instant.now());
-    return toApproval(approvalRepository.save(a));
+    a = approvalRepository.save(a);
+    if ("QUOTATION".equalsIgnoreCase(a.getObjectType())) {
+      quotationService.applyDiscountApprovalDecision(a.getObjectId(), approve, a.getId());
+    }
+    return toApproval(a);
   }
 
   @Transactional(readOnly = true)

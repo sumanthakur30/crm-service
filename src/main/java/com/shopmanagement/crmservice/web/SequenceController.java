@@ -35,39 +35,39 @@ public class SequenceController {
 
   @GetMapping
   public List<SequenceResponse> list() {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireSequencesAccess();
     return sequenceService.list();
   }
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public SequenceResponse upsert(@Valid @RequestBody SequenceUpsert body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireSequencesAccess();
     return sequenceService.upsert(body);
   }
 
   @PostMapping("/ensure-welcome")
   public SequenceResponse ensureWelcome() {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireSequencesAccess();
     return sequenceService.ensureWelcomeSequence();
   }
 
   @PostMapping("/enrollments")
   @ResponseStatus(HttpStatus.CREATED)
   public EnrollmentResponse enroll(@Valid @RequestBody EnrollRequest body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireSequencesAccess();
     return sequenceService.enroll(body);
   }
 
   @GetMapping("/enrollments")
   public List<EnrollmentResponse> enrollments() {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireSequencesAccess();
     return sequenceService.listEnrollments();
   }
 
   @PostMapping("/process-due")
   public ProcessDueResponse processDue(@RequestParam(defaultValue = "20") int limit) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireSequencesAccess();
     return sequenceService.processDue(limit);
   }
 }

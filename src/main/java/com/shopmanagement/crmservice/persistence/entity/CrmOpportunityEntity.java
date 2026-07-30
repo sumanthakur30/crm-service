@@ -36,6 +36,15 @@ public class CrmOpportunityEntity extends TenantAuditableEntity {
   @Column(name = "lead_id")
   private Long leadId;
 
+  @Column(name = "account_id")
+  private Long accountId;
+
+  @Column(name = "close_reason_code", length = 64)
+  private String closeReasonCode;
+
+  @Column(name = "close_reason_note", length = 512)
+  private String closeReasonNote;
+
   @Column(nullable = false, length = 256)
   private String name;
 

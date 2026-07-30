@@ -30,7 +30,7 @@ public class ErpConvertSinkController {
     response.put("targetSystem", t);
     response.put("status", "ACCEPTED");
     response.put("sink", true);
-    response.put("note", "Local CRM ERP sink — swap URL to live shop/school/FF from-crm when ready");
+    response.put("note", "Local CRM ERP sink — for SHOP_CUSTOMER set CRM_CONVERT_SHOP_URL to user-service :8084/api/v1/customers/from-crm");
     if (body != null) {
       response.put("crmLeadId", body.get("crmLeadId"));
       response.put("correlationId", body.get("correlationId"));

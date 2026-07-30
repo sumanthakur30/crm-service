@@ -20,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.config.CrmConvertProperties;
+import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.persistence.entity.CrmConvertEventEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmConvertEventRepository;
@@ -63,6 +64,16 @@ public class LeadConvertService {
             .findByTenantIdAndIdAndDeletedAtIsNull(tenantId, leadId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
 
+    Map<String, Object> prior = priorSuccessfulConvert(lead, target);
+    if (prior != null) {
+      Map<String, Object> ack = new LinkedHashMap<>(prior);
+      ack.put("alreadyConverted", true);
+      ack.put("convertEnabled", properties.isEnabled());
+      ack.put("mode", priorMode(prior));
+      return ack;
+    }
+
+    String correlationId = UUID.randomUUID().toString();
     Map<String, Object> request = new LinkedHashMap<>();
     request.put("crmLeadId", lead.getId());
     request.put("tenantId", tenantId);
@@ -72,7 +83,7 @@ public class LeadConvertService {
     request.put("email", lead.getEmail());
     request.put("phone", lead.getPhone());
     request.put("sourceCode", lead.getSourceCode());
-    request.put("correlationId", UUID.randomUUID().toString());
+    request.put("correlationId", correlationId);
 
     CrmConvertEventEntity event = new CrmConvertEventEntity();
     event.setTenantId(tenantId);
@@ -84,21 +95,21 @@ public class LeadConvertService {
       event.setStatus("SKIPPED");
       event.setResponseJson(Map.of("note", "crm.convert.enabled=false — payload stored only"));
       event = convertEventRepository.save(event);
-      stashRef(lead, target, event);
-      return toResponse(event);
+      stashRef(lead, target, event, false);
+      return toResponse(event, false, "DISABLED");
     }
 
-    String url =
-        switch (target) {
-          case "SHOP_CUSTOMER" -> properties.getShopCustomerUrl();
-          case "SCHOOL_INQUIRY" -> properties.getSchoolInquiryUrl();
-          default -> properties.getFieldForceUrl();
-        };
+    String url = resolveUrl(target);
+    String mode = isSinkUrl(url) ? "SINK" : "LIVE";
+    String shopId = resolveShopId(tenantId);
 
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.set("X-Tenant-Id", tenantId);
-    headers.set("X-Shop-Id", tenantId);
+    headers.set("X-Shop-Id", shopId);
+    if (properties.getInternalApiKey() != null && !properties.getInternalApiKey().isBlank()) {
+      headers.set("X-Internal-Api-Key", properties.getInternalApiKey().trim());
+    }
 
     try {
       ResponseEntity<Map<String, Object>> response =
@@ -126,22 +137,90 @@ public class LeadConvertService {
       event.setResponseJson(Map.of("error", event.getErrorMessage()));
       if (!properties.isFailOpen()) {
         convertEventRepository.save(event);
-        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "ERP convert failed: " + event.getErrorMessage());
+        throw new ResponseStatusException(
+            HttpStatus.BAD_GATEWAY, "ERP convert failed: " + event.getErrorMessage());
       }
     }
 
     event = convertEventRepository.save(event);
-    stashRef(lead, target, event);
+    boolean markConverted = "SENT".equals(event.getStatus());
+    stashRef(lead, target, event, markConverted);
     timelineService.recordEvent(
         "LEAD",
         lead.getId(),
         "LEAD_CONVERTED",
-        "Convert to " + target + " · " + event.getStatus(),
-        Map.of("eventId", event.getId(), "targetSystem", target, "status", event.getStatus()));
-    return toResponse(event);
+        "Convert to " + target + " · " + event.getStatus() + " · " + mode,
+        Map.of(
+            "eventId",
+            event.getId(),
+            "targetSystem",
+            target,
+            "status",
+            event.getStatus(),
+            "mode",
+            mode,
+            "externalId",
+            event.getExternalId() == null ? "" : event.getExternalId()));
+    return toResponse(event, false, mode);
   }
 
-  private void stashRef(CrmLeadEntity lead, String target, CrmConvertEventEntity event) {
+  private Map<String, Object> priorSuccessfulConvert(CrmLeadEntity lead, String target) {
+    Map<String, Object> refs =
+        lead.getExternalRefs() == null ? Map.of() : lead.getExternalRefs();
+    Object entry = refs.get(target);
+    if (!(entry instanceof Map<?, ?> map)) {
+      return null;
+    }
+    Object status = map.get("status");
+    Object externalId = map.get("externalId");
+    if (!"SENT".equals(String.valueOf(status)) || externalId == null || String.valueOf(externalId).isBlank()) {
+      return null;
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("id", map.get("eventId"));
+    out.put("leadId", lead.getId());
+    out.put("targetSystem", target);
+    out.put("status", "ACKED");
+    out.put("externalId", String.valueOf(externalId));
+    out.put("errorMessage", null);
+    out.put("request", Map.of());
+    out.put("response", Map.of("note", "Lead already converted to " + target + " — skipped duplicate"));
+    return out;
+  }
+
+  private static String priorMode(Map<String, Object> prior) {
+    Object response = prior.get("response");
+    if (response instanceof Map<?, ?> m && Boolean.TRUE.equals(m.get("sink"))) {
+      return "SINK";
+    }
+    return "LIVE";
+  }
+
+  private String resolveUrl(String target) {
+    return switch (target) {
+      case "SHOP_CUSTOMER" -> properties.getShopCustomerUrl();
+      case "SCHOOL_INQUIRY" -> properties.getSchoolInquiryUrl();
+      default -> properties.getFieldForceUrl();
+    };
+  }
+
+  private static boolean isSinkUrl(String url) {
+    return url != null && url.contains("/adapters/erp/");
+  }
+
+  private String resolveShopId(String tenantId) {
+    if (properties.getShopId() != null && !properties.getShopId().isBlank()) {
+      return properties.getShopId().trim();
+    }
+    String fromRequest = TenantContextFilter.getCurrentShopId();
+    if (fromRequest != null && !fromRequest.isBlank()) {
+      return fromRequest.trim();
+    }
+    return tenantId;
+  }
+
+  private void stashRef(
+      CrmLeadEntity lead, String target, CrmConvertEventEntity event, boolean markConverted) {
     Map<String, Object> refs =
         new LinkedHashMap<>(lead.getExternalRefs() == null ? Map.of() : lead.getExternalRefs());
     Map<String, Object> entry = new LinkedHashMap<>();
@@ -150,11 +229,15 @@ public class LeadConvertService {
     entry.put("externalId", event.getExternalId());
     refs.put(target, entry);
     lead.setExternalRefs(refs);
+    if (markConverted) {
+      lead.setStatus("CONVERTED");
+    }
     lead.touch();
     leadRepository.save(lead);
   }
 
-  private static Map<String, Object> toResponse(CrmConvertEventEntity e) {
+  private Map<String, Object> toResponse(
+      CrmConvertEventEntity e, boolean alreadyConverted, String mode) {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("id", e.getId());
     m.put("leadId", e.getLeadId());
@@ -164,6 +247,9 @@ public class LeadConvertService {
     m.put("errorMessage", e.getErrorMessage());
     m.put("request", e.getRequestJson());
     m.put("response", e.getResponseJson());
+    m.put("alreadyConverted", alreadyConverted);
+    m.put("convertEnabled", properties.isEnabled());
+    m.put("mode", mode);
     return m;
   }
 }

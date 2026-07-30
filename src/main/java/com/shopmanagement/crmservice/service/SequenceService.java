@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.springframework.http.HttpStatus;
@@ -85,7 +86,8 @@ public class SequenceService {
     seq.touch();
     seq = sequenceRepository.save(seq);
 
-    if (body.steps() != null && !body.steps().isEmpty()) {
+    // null = leave steps unchanged; non-null (incl. empty) = full replace for visual builder.
+    if (body.steps() != null) {
       for (CrmSequenceStepEntity existing :
           stepRepository.findByTenantIdAndSequenceIdAndDeletedAtIsNullOrderBySortOrderAsc(
               tenantId, seq.getId())) {
@@ -263,6 +265,11 @@ public class SequenceService {
             ? "SugamFlow CRM"
             : render(step.getSubjectTemplate(), enr);
     String body = render(step.getBodyTemplate(), enr);
+    Map<String, String> vars = new LinkedHashMap<>();
+    vars.put("subject", subject);
+    vars.put("body", body);
+    vars.put("recipient", Objects.toString(enr.getRecipient(), ""));
+    vars.put("leadId", enr.getLeadId() == null ? "" : String.valueOf(enr.getLeadId()));
     Map<String, Object> delivery =
         notificationClient.queue(
             tenantId,
@@ -270,7 +277,9 @@ public class SequenceService {
             enr.getRecipient(),
             subject,
             body,
-            "crm-seq-" + enr.getId() + "-step-" + enr.getCurrentStep());
+            "crm-seq-" + enr.getId() + "-step-" + enr.getCurrentStep(),
+            notificationClient.properties().getSequenceStepTemplate(),
+            vars);
     Map<String, Object> attrs = new LinkedHashMap<>(enr.getAttributes() == null ? Map.of() : enr.getAttributes());
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> history =

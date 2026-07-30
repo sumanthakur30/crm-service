@@ -38,7 +38,9 @@ public final class CrmLeadApi {
       @Size(max = 128) String utmMedium,
       @Size(max = 128) String utmCampaign,
       @Size(max = 128) String utmContent,
-      @Size(max = 128) String utmTerm) {}
+      @Size(max = 128) String utmTerm,
+      Long accountId,
+      Long contactId) {}
 
   public record LeadStatusPatch(
       @NotBlank @Size(max = 32) String status, Long stageId, @Size(max = 64) String lostReasonCode) {}
@@ -70,6 +72,8 @@ public final class CrmLeadApi {
       String utmCampaign,
       String utmContent,
       String utmTerm,
+      Long accountId,
+      Long contactId,
       Instant createdAt,
       Instant updatedAt) {}
 
@@ -90,7 +94,8 @@ public final class CrmLeadApi {
   public record StageResponse(
       Long id, Long pipelineId, String code, String name, int sortOrder, int probability, boolean won, boolean lost) {}
 
-  public record StatusResponse(String service, String phase, boolean entitlementCheckEnabled) {}
+  public record StatusResponse(
+      String service, String phase, boolean entitlementCheckEnabled, boolean convertEnabled) {}
 
   public record AssignRequest(String mode, String ownerUserId, String teamId) {}
 

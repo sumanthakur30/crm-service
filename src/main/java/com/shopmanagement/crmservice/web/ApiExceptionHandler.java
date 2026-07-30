@@ -11,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementException;
 import com.shopmanagement.crmservice.integration.NotificationDispatchException;
+import com.shopmanagement.crmservice.integration.OrderDispatchException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -25,6 +26,12 @@ public class ApiExceptionHandler {
   public ResponseEntity<Map<String, Object>> notification(NotificationDispatchException ex) {
     return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
         .body(Map.of("message", ex.getMessage(), "code", "CRM_NOTIFICATION_FAILED"));
+  }
+
+  @ExceptionHandler(OrderDispatchException.class)
+  public ResponseEntity<Map<String, Object>> order(OrderDispatchException ex) {
+    return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+        .body(Map.of("message", ex.getMessage(), "code", "CRM_ORDER_FAILED"));
   }
 
   @ExceptionHandler(ResponseStatusException.class)

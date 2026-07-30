@@ -85,7 +85,24 @@ public class QuotationController {
   public QuotationResponse send(
       @PathVariable Long id, @RequestBody(required = false) @Valid QuotationSendRequest body) {
     entitlementGuard.requireQuoteAccess();
+    if (body != null) {
+      entitlementGuard.requireChannelAccess(body.channel());
+    }
     return quotationService.markSent(id, body);
+  }
+
+  @PostMapping("/{id}/revise")
+  @ResponseStatus(HttpStatus.CREATED)
+  public QuotationResponse revise(@PathVariable Long id) {
+    entitlementGuard.requireQuoteAccess();
+    return quotationService.revise(id);
+  }
+
+  @PostMapping("/{id}/request-discount-approval")
+  public QuotationResponse requestDiscountApproval(@PathVariable Long id) {
+    entitlementGuard.requireQuoteAccess();
+    entitlementGuard.requireApprovalAccess();
+    return quotationService.requestDiscountApproval(id);
   }
 
   @PostMapping("/{id}/accept")

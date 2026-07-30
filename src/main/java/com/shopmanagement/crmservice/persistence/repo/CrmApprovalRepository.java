@@ -12,4 +12,7 @@ public interface CrmApprovalRepository extends JpaRepository<CrmApprovalEntity, 
   Optional<CrmApprovalEntity> findByTenantIdAndId(String tenantId, Long id);
 
   List<CrmApprovalEntity> findByTenantIdAndStatusOrderByCreatedAtDesc(String tenantId, String status);
+
+  Optional<CrmApprovalEntity> findFirstByTenantIdAndObjectTypeAndObjectIdAndStatusOrderByCreatedAtDesc(
+      String tenantId, String objectType, Long objectId, String status);
 }

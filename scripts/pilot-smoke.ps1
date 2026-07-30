@@ -1,5 +1,7 @@
 # CRM Retail pilot smoke (PowerShell)
-# Prereq: crm-service on :8095 with profile local,pilot-retail (or local), Postgres crmdb.
+# Prereq: crm-service on :8095. For local smoke without subscription plan:
+#   $env:CRM_ENTITLEMENT_ENABLED='false'
+#   mvn spring-boot:run "-Dspring-boot.run.profiles=local,pilot-retail"
 # Usage: .\scripts\pilot-smoke.ps1 -TenantId demo-crm
 
 param(
@@ -11,28 +13,58 @@ $ErrorActionPreference = "Stop"
 $headers = @{ "X-Tenant-Id" = $TenantId; "Content-Type" = "application/json" }
 
 function Step($name, $script) {
-  Write-Host "`n==> $name" -ForegroundColor Cyan
+  Write-Host ""
+  Write-Host "==> $name" -ForegroundColor Cyan
   & $script
 }
 
+function Invoke-Crm {
+  param([string]$Method = "Get", [string]$Uri, [object]$Body = $null)
+  try {
+    if ($null -eq $Body) {
+      return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $headers
+    }
+    return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $headers -Body ($Body | ConvertTo-Json -Depth 6)
+  } catch {
+    $resp = $_.Exception.Response
+    if ($null -eq $resp) {
+      Write-Host "Cannot reach $BaseUrl. Start crm-service first:" -ForegroundColor Red
+      Write-Host '  $env:CRM_ENTITLEMENT_ENABLED=''false'''
+      Write-Host '  mvn spring-boot:run "-Dspring-boot.run.profiles=local,pilot-retail"'
+      throw "crm-service not reachable on $BaseUrl"
+    }
+    $code = [int]$resp.StatusCode
+    if ($code -eq 403) {
+      Write-Host "HTTP 403 - FEATURE_CRM not enabled for tenant '$TenantId'." -ForegroundColor Red
+      Write-Host 'For local smoke: $env:CRM_ENTITLEMENT_ENABLED=''false'' then restart crm-service'
+      Write-Host 'Or assign crm-professional in subscription-service.'
+      throw "Forbidden for tenant $TenantId"
+    }
+    throw
+  }
+}
+
 Step "status" {
-  $s = Invoke-RestMethod -Uri "$BaseUrl/api/v1/crm/status" -Headers $headers
+  $s = Invoke-Crm -Uri "$BaseUrl/api/v1/crm/status"
   Write-Host ($s | ConvertTo-Json -Compress)
   if ($s.phase -notmatch "5") { Write-Warning "Expected phase 5-pilot, got $($s.phase)" }
+  if ($s.entitlementCheckEnabled) {
+    Write-Host "NOTE: entitlement check is ON." -ForegroundColor Yellow
+  }
 }
 
 Step "bootstrap RETAIL" {
-  $ws = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/crm/workspaces/bootstrap" -Headers $headers -Body (@{
+  $ws = Invoke-Crm -Method Post -Uri "$BaseUrl/api/v1/crm/workspaces/bootstrap" -Body @{
     name = "Pilot Retail"; templateCode = "RETAIL"
-  } | ConvertTo-Json)
+  }
   Write-Host "workspace=$($ws.name) template=$($ws.templateCode)"
 }
 
 Step "campaign" {
   $code = "PILOT-" + (Get-Date -Format "HHmmss")
-  $c = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/crm/campaigns" -Headers $headers -Body (@{
+  $c = Invoke-Crm -Method Post -Uri "$BaseUrl/api/v1/crm/campaigns" -Body @{
     code = $code; name = "Pilot campaign"; status = "ACTIVE"; channel = "WEB"; utmSource = "pilot"; utmMedium = "smoke"
-  } | ConvertTo-Json)
+  }
   $script:PublicKey = $c.publicKey
   Write-Host "campaign=$($c.id) publicKey=$($c.publicKey)"
 }
@@ -47,34 +79,33 @@ Step "public capture" {
 }
 
 Step "opportunity + quote" {
-  $opp = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/crm/opportunities" -Headers $headers -Body (@{
+  $opp = Invoke-Crm -Method Post -Uri "$BaseUrl/api/v1/crm/opportunities" -Body @{
     name = "Smoke deal"; leadId = $script:LeadId; amount = 10000; currency = "INR"
-  } | ConvertTo-Json)
-  $script:OppId = $opp.id
-  $q = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/crm/quotations" -Headers $headers -Body (@{
+  }
+  $q = Invoke-Crm -Method Post -Uri "$BaseUrl/api/v1/crm/quotations" -Body @{
     opportunityId = $opp.id
     customerName = "Smoke Tester"
     placeOfSupply = "KA"
     sellerStateCode = "29"
     buyerStateCode = "29"
     lines = @(@{ description = "Pilot SKU"; hsn = "9983"; quantity = 1; unitPrice = 10000; gstRate = 18 })
-  } | ConvertTo-Json -Depth 5)
-  $script:QuoteId = $q.id
-  $sent = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/crm/quotations/$($q.id)/send" -Headers $headers -Body (@{
+  }
+  $sent = Invoke-Crm -Method Post -Uri "$BaseUrl/api/v1/crm/quotations/$($q.id)/send" -Body @{
     channel = "WHATSAPP"; recipient = "9876543210"
-  } | ConvertTo-Json)
+  }
   Write-Host "quote=$($sent.id) status=$($sent.status)"
 }
 
 Step "convert SHOP_CUSTOMER" {
-  $conv = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/crm/leads/$($script:LeadId)/convert?targetSystem=SHOP_CUSTOMER" -Headers $headers
+  $conv = Invoke-Crm -Method Post -Uri "$BaseUrl/api/v1/crm/leads/$($script:LeadId)/convert?targetSystem=SHOP_CUSTOMER"
   Write-Host "convert status=$($conv.status) externalId=$($conv.externalId)"
 }
 
 Step "audit export" {
-  $job = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/crm/enterprise/audit-exports" -Headers $headers -Body (@{ format = "JSON" } | ConvertTo-Json)
+  $job = Invoke-Crm -Method Post -Uri "$BaseUrl/api/v1/crm/enterprise/audit-exports" -Body @{ format = "JSON" }
   Write-Host "export #$($job.id) status=$($job.status) rows=$($job.rowCount)"
   if ($job.status -ne "DONE") { throw "Audit export not DONE" }
 }
 
-Write-Host "`nPilot smoke PASS" -ForegroundColor Green
+Write-Host ""
+Write-Host "Pilot smoke PASS" -ForegroundColor Green

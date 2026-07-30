@@ -19,6 +19,7 @@ public final class CrmDealApi {
   public record OpportunityUpsert(
       @NotBlank @Size(max = 256) String name,
       Long leadId,
+      Long accountId,
       Long pipelineId,
       Long stageId,
       BigDecimal amount,
@@ -28,7 +29,9 @@ public final class CrmDealApi {
       @Size(max = 32) String status,
       @Size(max = 64) String ownerUserId,
       @Size(max = 64) String teamId,
-      Map<String, Object> attributes) {}
+      Map<String, Object> attributes,
+      @Size(max = 64) String closeReasonCode,
+      @Size(max = 512) String closeReasonNote) {}
 
   public record OpportunityResponse(
       Long id,
@@ -36,6 +39,7 @@ public final class CrmDealApi {
       Long pipelineId,
       Long stageId,
       Long leadId,
+      Long accountId,
       String name,
       BigDecimal amount,
       String currency,
@@ -45,8 +49,13 @@ public final class CrmDealApi {
       String ownerUserId,
       String teamId,
       Map<String, Object> attributes,
+      String closeReasonCode,
+      String closeReasonNote,
       Instant createdAt,
       Instant updatedAt) {}
+
+  public record OpportunityStageMove(
+      @Size(max = 64) String closeReasonCode, @Size(max = 512) String closeReasonNote) {}
 
   public record QuoteLine(
       @NotBlank String description,
@@ -74,7 +83,10 @@ public final class CrmDealApi {
       Long opportunityId,
       String quoteNumber,
       int versionNo,
+      Long parentQuotationId,
       String status,
+      String approvalStatus,
+      Long approvalId,
       String customerName,
       String customerGstin,
       String placeOfSupply,

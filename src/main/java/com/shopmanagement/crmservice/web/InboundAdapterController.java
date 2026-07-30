@@ -55,7 +55,7 @@ public class InboundAdapterController {
   @ResponseStatus(HttpStatus.CREATED)
   public Map<String, Object> authenticatedIngest(
       @PathVariable String provider, @RequestBody Map<String, Object> payload) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireApiAccess();
     String key = payload.get("publicKey") == null ? null : String.valueOf(payload.get("publicKey"));
     return inboundAdapterService.ingest(
         provider, com.shopmanagement.crmservice.support.TenantIds.require(), key, payload);

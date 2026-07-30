@@ -32,8 +32,11 @@ class CrmLeadServiceTest {
   @Mock private CrmPipelineRepository pipelineRepository;
   @Mock private CrmStageRepository stageRepository;
   @Mock private com.shopmanagement.crmservice.persistence.repo.CrmCampaignRepository campaignRepository;
+  @Mock private com.shopmanagement.crmservice.persistence.repo.CrmAccountRepository accountRepository;
+  @Mock private com.shopmanagement.crmservice.persistence.repo.CrmContactRepository contactRepository;
   @Mock private WorkspaceBootstrapService workspaceBootstrapService;
   @Mock private TimelineService timelineService;
+  @Mock private StageAutomationService stageAutomationService;
 
   @InjectMocks private CrmLeadService leadService;
 
@@ -92,6 +95,8 @@ class CrmLeadServiceTest {
                 null,
                 MapAttrs.empty(),
                 MapAttrs.empty(),
+                null,
+                null,
                 null,
                 null,
                 null,

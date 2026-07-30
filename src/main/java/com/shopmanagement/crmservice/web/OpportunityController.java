@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityResponse;
+import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityStageMove;
 import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityUpsert;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.OpportunityService;
@@ -62,8 +63,11 @@ public class OpportunityController {
   }
 
   @PostMapping("/{id}/stage/{stageId}")
-  public OpportunityResponse moveStage(@PathVariable Long id, @PathVariable Long stageId) {
+  public OpportunityResponse moveStage(
+      @PathVariable Long id,
+      @PathVariable Long stageId,
+      @RequestBody(required = false) @Valid OpportunityStageMove body) {
     entitlementGuard.requireCrmAccess();
-    return opportunityService.moveStage(id, stageId);
+    return opportunityService.moveStage(id, stageId, body);
   }
 }

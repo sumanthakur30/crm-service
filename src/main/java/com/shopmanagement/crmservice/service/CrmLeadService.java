@@ -3,6 +3,7 @@ package com.shopmanagement.crmservice.service;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.springframework.data.domain.Page;
@@ -18,7 +19,9 @@ import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmPipelineEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmStageEntity;
+import com.shopmanagement.crmservice.persistence.repo.CrmAccountRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmCampaignRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmContactRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmPipelineRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageRepository;
@@ -34,22 +37,31 @@ public class CrmLeadService {
   private final CrmPipelineRepository pipelineRepository;
   private final CrmStageRepository stageRepository;
   private final CrmCampaignRepository campaignRepository;
+  private final CrmAccountRepository accountRepository;
+  private final CrmContactRepository contactRepository;
   private final WorkspaceBootstrapService workspaceBootstrapService;
   private final TimelineService timelineService;
+  private final StageAutomationService stageAutomationService;
 
   public CrmLeadService(
       CrmLeadRepository leadRepository,
       CrmPipelineRepository pipelineRepository,
       CrmStageRepository stageRepository,
       CrmCampaignRepository campaignRepository,
+      CrmAccountRepository accountRepository,
+      CrmContactRepository contactRepository,
       WorkspaceBootstrapService workspaceBootstrapService,
-      TimelineService timelineService) {
+      TimelineService timelineService,
+      StageAutomationService stageAutomationService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
     this.campaignRepository = campaignRepository;
+    this.accountRepository = accountRepository;
+    this.contactRepository = contactRepository;
     this.workspaceBootstrapService = workspaceBootstrapService;
     this.timelineService = timelineService;
+    this.stageAutomationService = stageAutomationService;
   }
 
   @Transactional
@@ -119,6 +131,15 @@ public class CrmLeadService {
             "toStatus", lead.getStatus(),
             "fromStageId", previousStage,
             "toStageId", lead.getStageId()));
+    if (body.stageId() != null && !Objects.equals(previousStage, lead.getStageId())) {
+      stageAutomationService.onStageChanged(
+          "LEAD",
+          lead.getId(),
+          previousStage,
+          lead.getStageId(),
+          lead.getOwnerUserId(),
+          lead.getTitle() != null ? lead.getTitle() : ("Lead #" + lead.getId()));
+    }
     return toResponse(lead);
   }
 
@@ -254,6 +275,31 @@ public class CrmLeadService {
     if (body.utmTerm() != null) {
       lead.setUtmTerm(blankToNull(body.utmTerm()));
     }
+    if (body.accountId() != null) {
+      accountRepository
+          .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), body.accountId())
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid accountId"));
+      lead.setAccountId(body.accountId());
+    } else if (creating) {
+      lead.setAccountId(null);
+    }
+    if (body.contactId() != null) {
+      var contact =
+          contactRepository
+              .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), body.contactId())
+              .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid contactId"));
+      if (body.accountId() != null
+          && contact.getAccountId() != null
+          && !body.accountId().equals(contact.getAccountId())) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "contactId does not belong to accountId");
+      }
+      lead.setContactId(body.contactId());
+      if (lead.getAccountId() == null && contact.getAccountId() != null) {
+        lead.setAccountId(contact.getAccountId());
+      }
+    } else if (creating) {
+      lead.setContactId(null);
+    }
   }
 
   private static String normalizeStatus(String status) {
@@ -304,6 +350,8 @@ public class CrmLeadService {
         lead.getUtmCampaign(),
         lead.getUtmContent(),
         lead.getUtmTerm(),
+        lead.getAccountId(),
+        lead.getContactId(),
         lead.getCreatedAt(),
         lead.getUpdatedAt());
   }

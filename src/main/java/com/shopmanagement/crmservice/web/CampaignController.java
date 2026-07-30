@@ -34,20 +34,20 @@ public class CampaignController {
 
   @GetMapping("/campaigns")
   public List<CampaignResponse> list() {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireCampaignAccess();
     return campaignService.list();
   }
 
   @GetMapping("/campaigns/{id}")
   public CampaignResponse get(@PathVariable Long id) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireCampaignAccess();
     return campaignService.get(id);
   }
 
   @PostMapping("/campaigns")
   @ResponseStatus(HttpStatus.CREATED)
   public CampaignResponse upsert(@Valid @RequestBody CampaignUpsert body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireCampaignAccess();
     return campaignService.upsert(body);
   }
 

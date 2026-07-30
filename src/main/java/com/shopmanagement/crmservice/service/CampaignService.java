@@ -142,7 +142,9 @@ public class CampaignService {
                 firstNonBlank(body.utmMedium(), campaign.getUtmMedium()),
                 firstNonBlank(body.utmCampaign(), campaign.getUtmCampaign()),
                 firstNonBlank(body.utmContent(), campaign.getUtmContent()),
-                firstNonBlank(body.utmTerm(), campaign.getUtmTerm())));
+                firstNonBlank(body.utmTerm(), campaign.getUtmTerm()),
+                null,
+                null));
     scoringService.ensureDefaultRules();
     lead =
         scoringService.applyEvent(

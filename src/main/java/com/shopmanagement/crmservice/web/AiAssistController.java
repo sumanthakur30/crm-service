@@ -29,28 +29,28 @@ public class AiAssistController {
   @PostMapping("/leads/{leadId}/summarize")
   public Map<String, Object> summarizeLead(
       @PathVariable Long leadId, @RequestParam(required = false) String language) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     return aiAssistService.summarizeLead(leadId, language);
   }
 
   @PostMapping("/leads/{leadId}/nba")
   public Map<String, Object> nba(
       @PathVariable Long leadId, @RequestParam(required = false) String language) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     return aiAssistService.nextBestAction(leadId, language);
   }
 
   @PostMapping("/leads/{leadId}/score-explain")
   public Map<String, Object> scoreExplain(
       @PathVariable Long leadId, @RequestParam(required = false) String language) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     return aiAssistService.explainScore(leadId, language);
   }
 
   @PostMapping("/leads/{leadId}/churn-upsell")
   public Map<String, Object> churnUpsell(
       @PathVariable Long leadId, @RequestParam(required = false) String language) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     return aiAssistService.churnUpsell(leadId, language);
   }
 
@@ -59,27 +59,27 @@ public class AiAssistController {
       @PathVariable Long leadId,
       @RequestParam(required = false, defaultValue = "WHATSAPP") String channel,
       @RequestParam(required = false) String language) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     return aiAssistService.draftMessage(leadId, channel, language);
   }
 
   @PostMapping("/opportunities/{opportunityId}/win-predict")
   public Map<String, Object> winPredict(
       @PathVariable Long opportunityId, @RequestParam(required = false) String language) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     return aiAssistService.winPredict(opportunityId, language);
   }
 
   @PostMapping("/ocr/card")
   public Map<String, Object> ocrCard(
       @RequestBody Map<String, Object> body, @RequestParam(required = false) String language) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     return aiAssistService.ocrCard(body, language);
   }
 
   @PostMapping("/copilot")
   public Map<String, Object> copilot(@RequestBody Map<String, Object> body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     String question = body.get("question") == null ? "" : String.valueOf(body.get("question"));
     Long leadId = body.get("leadId") == null ? null : ((Number) body.get("leadId")).longValue();
     Long opportunityId =
@@ -91,7 +91,7 @@ public class AiAssistController {
   @GetMapping("/insights")
   public List<Map<String, Object>> insights(
       @RequestParam String relatedType, @RequestParam Long relatedId) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireAiAccess();
     return aiAssistService.listInsights(relatedType, relatedId);
   }
 }
