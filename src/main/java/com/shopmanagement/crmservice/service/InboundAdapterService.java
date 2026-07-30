@@ -148,7 +148,6 @@ public class InboundAdapterService {
                   firstString(payload, "ad_name", "utm_content"),
                   firstString(payload, "keyword", "utm_term"),
                   Map.of("provider", provider, "raw", payload)));
-      scoringService.applyEvent(lead.id(), "CAMPAIGN_CAPTURE", provider + " capture", Map.of("provider", provider));
       return lead;
     }
     // Authenticated path with tenant already bound

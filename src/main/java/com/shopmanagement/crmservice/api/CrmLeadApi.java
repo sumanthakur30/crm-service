@@ -94,10 +94,26 @@ public final class CrmLeadApi {
 
   public record AssignRequest(String mode, String ownerUserId, String teamId) {}
 
-  public record TeamMemberRequest(String teamId, String userId, String displayName, Boolean active, Integer sortOrder) {}
+  public record TeamMemberRequest(
+      String teamId,
+      String userId,
+      String displayName,
+      Boolean active,
+      Integer sortOrder,
+      String stateCodes,
+      String pincodePrefixes,
+      Integer openLeadCap) {}
 
   public record TeamMemberResponse(
-      Long id, String teamId, String userId, String displayName, boolean active, int sortOrder) {}
+      Long id,
+      String teamId,
+      String userId,
+      String displayName,
+      boolean active,
+      int sortOrder,
+      String stateCodes,
+      String pincodePrefixes,
+      int openLeadCap) {}
 
   public record ImportResult(int totalRows, int created, int skipped, List<String> errors) {}
 

@@ -12,6 +12,9 @@ public class CrmProperties {
 
   private String flag = "FEATURE_CRM";
 
+  /** Optional quote gate; empty disables sub-flag check. */
+  private String quoteFlag = "FEATURE_CRM_QUOTE";
+
   /** If subscription-service is unreachable, allow request when true. */
   private boolean failOpen = false;
 
@@ -37,6 +40,14 @@ public class CrmProperties {
 
   public void setFlag(String flag) {
     this.flag = flag;
+  }
+
+  public String getQuoteFlag() {
+    return quoteFlag;
+  }
+
+  public void setQuoteFlag(String quoteFlag) {
+    this.quoteFlag = quoteFlag;
   }
 
   public boolean isFailOpen() {

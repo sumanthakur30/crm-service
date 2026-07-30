@@ -43,25 +43,25 @@ public class QuotationController {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public QuotationResponse create(@Valid @RequestBody QuotationUpsert body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireQuoteAccess();
     return quotationService.create(body);
   }
 
   @GetMapping("/{id}")
   public QuotationResponse get(@PathVariable Long id) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireQuoteAccess();
     return quotationService.get(id);
   }
 
   @GetMapping("/by-opportunity/{opportunityId}")
   public List<QuotationResponse> byOpportunity(@PathVariable Long opportunityId) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireQuoteAccess();
     return quotationService.listForOpportunity(opportunityId);
   }
 
   @GetMapping("/{id}/pdf")
   public ResponseEntity<byte[]> pdf(@PathVariable Long id) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireQuoteAccess();
     byte[] bytes = quotationPdfService.renderPdf(id);
     return ResponseEntity.ok()
         .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"quotation-" + id + ".pdf\"")
@@ -71,26 +71,26 @@ public class QuotationController {
 
   @PostMapping("/{id}/payment-link")
   public QuotationResponse paymentLink(@PathVariable Long id) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireQuoteAccess();
     return quotationService.createPaymentLink(id);
   }
 
   @PostMapping("/{id}/mark-paid")
   public QuotationResponse markPaid(@PathVariable Long id) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireQuoteAccess();
     return quotationService.markPaid(id);
   }
 
   @PostMapping("/{id}/send")
   public QuotationResponse send(
       @PathVariable Long id, @RequestBody(required = false) @Valid QuotationSendRequest body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireQuoteAccess();
     return quotationService.markSent(id, body);
   }
 
   @PostMapping("/{id}/accept")
   public QuotationResponse accept(@PathVariable Long id) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireQuoteAccess();
     return quotationService.accept(id);
   }
 }

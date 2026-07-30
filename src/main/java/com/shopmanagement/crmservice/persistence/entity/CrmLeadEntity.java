@@ -99,4 +99,19 @@ public class CrmLeadEntity extends TenantAuditableEntity {
 
   @Column(name = "utm_term", length = 128)
   private String utmTerm;
+
+  @Column(name = "account_id")
+  private Long accountId;
+
+  @Column(name = "contact_id")
+  private Long contactId;
+
+  @Column(name = "state_code", length = 8)
+  private String stateCode;
+
+  @Column(length = 16)
+  private String pincode;
+
+  @Column(name = "merged_into_lead_id")
+  private Long mergedIntoLeadId;
 }

@@ -30,10 +30,15 @@ public class CampaignService {
 
   private final CrmCampaignRepository campaignRepository;
   private final CrmLeadService leadService;
+  private final BehaviorScoringService scoringService;
 
-  public CampaignService(CrmCampaignRepository campaignRepository, CrmLeadService leadService) {
+  public CampaignService(
+      CrmCampaignRepository campaignRepository,
+      CrmLeadService leadService,
+      BehaviorScoringService scoringService) {
     this.campaignRepository = campaignRepository;
     this.leadService = leadService;
+    this.scoringService = scoringService;
   }
 
   @Transactional
@@ -111,32 +116,47 @@ public class CampaignService {
     TenantContextFilter.bindTenant(campaign.getTenantId());
     String source =
         firstNonBlank(body.utmSource(), campaign.getUtmSource(), campaign.getChannel(), "CAMPAIGN");
-    return leadService.create(
-        new LeadUpsert(
-            body.title(),
-            body.displayName(),
-            body.companyName(),
-            body.email(),
-            body.phone(),
-            source,
-            "OPEN",
-            "MEDIUM",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            body.attributes(),
-            null,
-            "public-capture",
-            campaign.getId(),
-            firstNonBlank(body.utmSource(), campaign.getUtmSource()),
-            firstNonBlank(body.utmMedium(), campaign.getUtmMedium()),
-            firstNonBlank(body.utmCampaign(), campaign.getUtmCampaign()),
-            firstNonBlank(body.utmContent(), campaign.getUtmContent()),
-            firstNonBlank(body.utmTerm(), campaign.getUtmTerm())));
+    LeadResponse lead =
+        leadService.create(
+            new LeadUpsert(
+                body.title(),
+                body.displayName(),
+                body.companyName(),
+                body.email(),
+                body.phone(),
+                source,
+                "OPEN",
+                "MEDIUM",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                body.attributes(),
+                null,
+                "public-capture",
+                campaign.getId(),
+                firstNonBlank(body.utmSource(), campaign.getUtmSource()),
+                firstNonBlank(body.utmMedium(), campaign.getUtmMedium()),
+                firstNonBlank(body.utmCampaign(), campaign.getUtmCampaign()),
+                firstNonBlank(body.utmContent(), campaign.getUtmContent()),
+                firstNonBlank(body.utmTerm(), campaign.getUtmTerm())));
+    scoringService.ensureDefaultRules();
+    lead =
+        scoringService.applyEvent(
+            lead.id(),
+            "CAMPAIGN_CAPTURE",
+            "Public campaign capture",
+            Map.of("campaignId", campaign.getId(), "publicKey", publicKey));
+    if (body.email() != null && !body.email().isBlank()) {
+      lead = scoringService.applyEvent(lead.id(), "EMAIL_PRESENT", "Email on capture", Map.of());
+    }
+    if (body.phone() != null && !body.phone().isBlank()) {
+      lead = scoringService.applyEvent(lead.id(), "PHONE_PRESENT", "Phone on capture", Map.of());
+    }
+    return lead;
   }
 
   private CrmCampaignEntity require(String tenantId, Long id) {

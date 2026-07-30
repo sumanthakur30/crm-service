@@ -12,6 +12,8 @@ public interface CrmScoreEventRepository extends JpaRepository<CrmScoreEventEnti
 
   List<CrmScoreEventEntity> findByTenantIdAndLeadIdOrderByCreatedAtDesc(String tenantId, Long leadId);
 
+  List<CrmScoreEventEntity> findByTenantIdOrderByCreatedAtDesc(String tenantId);
+
   @Query(
       """
       SELECT COALESCE(SUM(e.points), 0)

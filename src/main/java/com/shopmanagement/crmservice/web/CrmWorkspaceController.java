@@ -37,7 +37,7 @@ public class CrmWorkspaceController {
 
   @GetMapping("/status")
   public StatusResponse status() {
-    return new StatusResponse("crm-service", "4", crmProperties.isEnabled());
+    return new StatusResponse("crm-service", "5-pilot", crmProperties.isEnabled());
   }
 
   @PostMapping("/workspaces/bootstrap")

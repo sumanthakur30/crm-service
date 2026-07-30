@@ -14,5 +14,7 @@ public interface CrmQuotationRepository extends JpaRepository<CrmQuotationEntity
   List<CrmQuotationEntity> findByTenantIdAndOpportunityIdAndDeletedAtIsNullOrderByVersionNoDesc(
       String tenantId, Long opportunityId);
 
+  List<CrmQuotationEntity> findByTenantIdAndDeletedAtIsNullOrderByCreatedAtDesc(String tenantId);
+
   long countByTenantIdAndDeletedAtIsNull(String tenantId);
 }

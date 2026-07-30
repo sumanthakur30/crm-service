@@ -37,18 +37,21 @@ public class QuotationService {
   private final TimelineService timelineService;
   private final NotificationClient notificationClient;
   private final CrmPaymentProperties paymentProperties;
+  private final BehaviorScoringService scoringService;
 
   public QuotationService(
       CrmQuotationRepository quotationRepository,
       CrmOpportunityRepository opportunityRepository,
       TimelineService timelineService,
       NotificationClient notificationClient,
-      CrmPaymentProperties paymentProperties) {
+      CrmPaymentProperties paymentProperties,
+      BehaviorScoringService scoringService) {
     this.quotationRepository = quotationRepository;
     this.opportunityRepository = opportunityRepository;
     this.timelineService = timelineService;
     this.notificationClient = notificationClient;
     this.paymentProperties = paymentProperties;
+    this.scoringService = scoringService;
   }
 
   @Transactional
@@ -126,19 +129,33 @@ public class QuotationService {
     quote.setSharePayloadJson(share);
     quote.touch();
     quote = quotationRepository.save(quote);
+    final Long quotationId = quote.getId();
+    final Long opportunityId = quote.getOpportunityId();
+    final String quoteNumber = quote.getQuoteNumber();
     timelineService.recordEvent(
         "OPPORTUNITY",
-        quote.getOpportunityId(),
+        opportunityId,
         "QUOTE_SENT",
-        "Quote " + quote.getQuoteNumber() + " marked SENT"
+        "Quote " + quoteNumber + " marked SENT"
             + (channel != null ? " via " + channel : ""),
         Map.of(
             "quotationId",
-            quote.getId(),
+            quotationId,
             "channel",
             channel == null ? "" : channel,
             "recipient",
             recipient == null ? "" : recipient));
+    opportunityRepository
+        .findByTenantIdAndIdAndDeletedAtIsNull(tenantId, opportunityId)
+        .map(CrmOpportunityEntity::getLeadId)
+        .filter(Objects::nonNull)
+        .ifPresent(
+            leadId ->
+                scoringService.applyEvent(
+                    leadId,
+                    "QUOTE_SENT",
+                    "Quote " + quoteNumber + " sent",
+                    Map.of("quotationId", quotationId)));
     return toResponse(quote);
   }
 

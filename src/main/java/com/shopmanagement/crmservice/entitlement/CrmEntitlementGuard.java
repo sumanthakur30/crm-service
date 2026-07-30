@@ -21,8 +21,24 @@ public class CrmEntitlementGuard {
       return;
     }
     String tenantId = TenantIds.require();
-    if (!client.hasCrmFeature(tenantId)) {
-      throw new CrmEntitlementException("FEATURE_CRM is not enabled for this tenant");
+    if (!client.hasFeature(tenantId, properties.getFlag())) {
+      throw new CrmEntitlementException(properties.getFlag() + " is not enabled for this tenant");
+    }
+  }
+
+  /** Quote APIs — requires FEATURE_CRM plus FEATURE_CRM_QUOTE when quoteFlag is configured. */
+  public void requireQuoteAccess() {
+    requireCrmAccess();
+    if (!properties.isEnabled()) {
+      return;
+    }
+    String quoteFlag = properties.getQuoteFlag();
+    if (quoteFlag == null || quoteFlag.isBlank()) {
+      return;
+    }
+    String tenantId = TenantIds.require();
+    if (!client.hasFeature(tenantId, quoteFlag.trim())) {
+      throw new CrmEntitlementException(quoteFlag + " is not enabled — assign crm-professional or higher");
     }
   }
 }

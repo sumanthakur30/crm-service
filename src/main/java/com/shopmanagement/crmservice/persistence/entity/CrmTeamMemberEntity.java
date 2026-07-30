@@ -33,4 +33,13 @@ public class CrmTeamMemberEntity extends TenantAuditableEntity {
 
   @Column(name = "sort_order", nullable = false)
   private int sortOrder;
+
+  @Column(name = "state_codes", nullable = false, columnDefinition = "TEXT")
+  private String stateCodes = "";
+
+  @Column(name = "pincode_prefixes", nullable = false, columnDefinition = "TEXT")
+  private String pincodePrefixes = "";
+
+  @Column(name = "open_lead_cap", nullable = false)
+  private int openLeadCap;
 }

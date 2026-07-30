@@ -31,10 +31,15 @@ public class SubscriptionEntitlementClient {
 
   /** Returns true when FEATURE_CRM is enabled for the tenant organization. */
   public boolean hasCrmFeature(String tenantId) {
+    return hasFeature(tenantId, properties.getFlag());
+  }
+
+  public boolean hasFeature(String tenantId, String flagCode) {
+    String flag = flagCode == null || flagCode.isBlank() ? properties.getFlag() : flagCode.trim();
     String url =
         UriComponentsBuilder.fromUriString(trimSlash(properties.getBaseUrl()))
             .path("/api/subscription/feature-flags/")
-            .pathSegment(properties.getFlag())
+            .pathSegment(flag)
             .toUriString();
 
     HttpHeaders headers = new HttpHeaders();
@@ -59,7 +64,7 @@ public class SubscriptionEntitlementClient {
       }
       return Boolean.TRUE.equals(body.get("enabled"));
     } catch (RestClientException ex) {
-      log.warn("CRM entitlement check failed for tenant={}: {}", tenantId, ex.getMessage());
+      log.warn("CRM entitlement check failed for tenant={} flag={}: {}", tenantId, flag, ex.getMessage());
       if (properties.isFailOpen()) {
         return true;
       }

@@ -17,8 +17,11 @@ import com.shopmanagement.crmservice.persistence.entity.CrmAuditExportJobEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmTenantEnterpriseEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmAuditExportJobRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmConvertEventRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmInboundEventRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmQuotationRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmScoreEventRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmTenantEnterpriseRepository;
 import com.shopmanagement.crmservice.support.TenantIds;
 
@@ -31,16 +34,25 @@ public class EnterpriseGovernanceService {
   private final CrmAuditExportJobRepository auditExportJobRepository;
   private final CrmLeadRepository leadRepository;
   private final CrmInboundEventRepository inboundEventRepository;
+  private final CrmConvertEventRepository convertEventRepository;
+  private final CrmQuotationRepository quotationRepository;
+  private final CrmScoreEventRepository scoreEventRepository;
 
   public EnterpriseGovernanceService(
       CrmTenantEnterpriseRepository enterpriseRepository,
       CrmAuditExportJobRepository auditExportJobRepository,
       CrmLeadRepository leadRepository,
-      CrmInboundEventRepository inboundEventRepository) {
+      CrmInboundEventRepository inboundEventRepository,
+      CrmConvertEventRepository convertEventRepository,
+      CrmQuotationRepository quotationRepository,
+      CrmScoreEventRepository scoreEventRepository) {
     this.enterpriseRepository = enterpriseRepository;
     this.auditExportJobRepository = auditExportJobRepository;
     this.leadRepository = leadRepository;
     this.inboundEventRepository = inboundEventRepository;
+    this.convertEventRepository = convertEventRepository;
+    this.quotationRepository = quotationRepository;
+    this.scoreEventRepository = scoreEventRepository;
   }
 
   @Transactional
@@ -145,14 +157,65 @@ public class EnterpriseGovernanceService {
                   })
               .toList();
 
+      List<Map<String, Object>> converts =
+          convertEventRepository.findByTenantIdOrderByCreatedAtDesc(tenantId).stream()
+              .limit(200)
+              .map(
+                  ev -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", ev.getId());
+                    m.put("leadId", ev.getLeadId());
+                    m.put("targetSystem", ev.getTargetSystem());
+                    m.put("status", ev.getStatus());
+                    m.put("externalId", ev.getExternalId());
+                    m.put("createdAt", ev.getCreatedAt());
+                    return m;
+                  })
+              .toList();
+
+      List<Map<String, Object>> quotations =
+          quotationRepository.findByTenantIdAndDeletedAtIsNullOrderByCreatedAtDesc(tenantId).stream()
+              .limit(200)
+              .map(
+                  q -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", q.getId());
+                    m.put("quoteNumber", q.getQuoteNumber());
+                    m.put("opportunityId", q.getOpportunityId());
+                    m.put("status", q.getStatus());
+                    m.put("totalAmount", q.getTotalAmount());
+                    m.put("createdAt", q.getCreatedAt());
+                    return m;
+                  })
+              .toList();
+
+      List<Map<String, Object>> scoreEvents =
+          scoreEventRepository.findByTenantIdOrderByCreatedAtDesc(tenantId).stream()
+              .limit(500)
+              .map(
+                  e -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", e.getId());
+                    m.put("leadId", e.getLeadId());
+                    m.put("eventType", e.getEventType());
+                    m.put("points", e.getPoints());
+                    m.put("createdAt", e.getCreatedAt());
+                    return m;
+                  })
+              .toList();
+
       Map<String, Object> result = new LinkedHashMap<>();
       result.put("tenantId", tenantId);
       result.put("dataResidency", settings.getDataResidency());
       result.put("exportedAt", Instant.now().toString());
+      result.put("pilotVertical", "RETAIL");
       result.put("leads", leads);
       result.put("inboundEvents", inbound);
+      result.put("convertEvents", converts);
+      result.put("quotations", quotations);
+      result.put("scoreEvents", scoreEvents);
       job.setResultJson(result);
-      job.setRowCount(leads.size() + inbound.size());
+      job.setRowCount(leads.size() + inbound.size() + converts.size() + quotations.size() + scoreEvents.size());
       job.setStatus("DONE");
       job.setArtifactUrl("/api/v1/crm/enterprise/audit-exports/" + job.getId());
       job.setCompletedAt(Instant.now());

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.config.CrmAiProperties;
+import com.shopmanagement.crmservice.integration.AiHttpClient;
 import com.shopmanagement.crmservice.persistence.entity.CrmAiInsightEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
@@ -34,6 +35,7 @@ public class AiAssistService {
   private final CrmScoreEventRepository scoreEventRepository;
   private final CrmTenantEnterpriseRepository enterpriseRepository;
   private final TimelineService timelineService;
+  private final AiHttpClient aiHttpClient;
 
   public AiAssistService(
       CrmAiProperties aiProperties,
@@ -42,7 +44,8 @@ public class AiAssistService {
       CrmOpportunityRepository opportunityRepository,
       CrmScoreEventRepository scoreEventRepository,
       CrmTenantEnterpriseRepository enterpriseRepository,
-      TimelineService timelineService) {
+      TimelineService timelineService,
+      AiHttpClient aiHttpClient) {
     this.aiProperties = aiProperties;
     this.insightRepository = insightRepository;
     this.leadRepository = leadRepository;
@@ -50,6 +53,7 @@ public class AiAssistService {
     this.scoreEventRepository = scoreEventRepository;
     this.enterpriseRepository = enterpriseRepository;
     this.timelineService = timelineService;
+    this.aiHttpClient = aiHttpClient;
   }
 
   @Transactional
@@ -79,15 +83,24 @@ public class AiAssistService {
             + (lead.getUtmSource() != null ? " · UTM " + lead.getUtmSource() + "/" + nvl(lead.getUtmMedium(), "-") : "")
             + ".";
     body = localize(body, lang);
+    Map<String, Object> http =
+        aiHttpClient.complete(
+            "SUMMARY",
+            lang,
+            Map.of("leadId", leadId, "title", lead.getTitle(), "score", score, "status", lead.getStatus()));
+    if (http.get("body") != null) {
+      body = String.valueOf(http.get("body"));
+    }
+    String title = http.get("title") != null ? String.valueOf(http.get("title")) : "Lead summary";
     return persist(
         "LEAD",
         leadId,
         "SUMMARY",
-        "Lead summary",
+        title,
         body,
         confidence(0.72 + Math.min(0.2, score / 500.0)),
         lang,
-        Map.of("score", score, "status", lead.getStatus()));
+        Map.of("score", score, "status", lead.getStatus(), "provider", aiProperties.getProvider()));
   }
 
   @Transactional
@@ -268,6 +281,14 @@ public class AiAssistService {
                   + ". Shall I send a GST quotation on WhatsApp?";
         };
     draft = localize(draft, lang);
+    Map<String, Object> http =
+        aiHttpClient.complete(
+            "DRAFT",
+            lang,
+            Map.of("leadId", leadId, "channel", ch, "name", name, "title", lead.getTitle()));
+    if (http.get("body") != null) {
+      draft = String.valueOf(http.get("body"));
+    }
     return persist(
         "LEAD",
         leadId,
@@ -276,7 +297,7 @@ public class AiAssistService {
         draft,
         confidence(0.75),
         lang,
-        Map.of("channel", ch));
+        Map.of("channel", ch, "provider", aiProperties.getProvider()));
   }
 
   @Transactional

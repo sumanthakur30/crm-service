@@ -55,7 +55,9 @@ class AiAssistServiceTest {
             opportunityRepository,
             scoreEventRepository,
             enterpriseRepository,
-            timelineService);
+            timelineService,
+            new com.shopmanagement.crmservice.integration.AiHttpClient(
+                new org.springframework.web.client.RestTemplate(), props));
     TenantContextFilter.bindTenantForTests("demo-crm");
   }
 
