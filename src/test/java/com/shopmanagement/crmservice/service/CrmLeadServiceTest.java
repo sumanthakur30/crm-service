@@ -32,6 +32,7 @@ class CrmLeadServiceTest {
   @Mock private CrmPipelineRepository pipelineRepository;
   @Mock private CrmStageRepository stageRepository;
   @Mock private WorkspaceBootstrapService workspaceBootstrapService;
+  @Mock private TimelineService timelineService;
 
   @InjectMocks private CrmLeadService leadService;
 

@@ -26,6 +26,7 @@ import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.AssignmentService;
 import com.shopmanagement.crmservice.service.CrmLeadService;
 import com.shopmanagement.crmservice.service.LeadImportService;
+import com.shopmanagement.crmservice.service.TimelineService;
 
 import jakarta.validation.Valid;
 
@@ -36,16 +37,19 @@ public class CrmLeadController {
   private final CrmLeadService leadService;
   private final AssignmentService assignmentService;
   private final LeadImportService importService;
+  private final TimelineService timelineService;
   private final CrmEntitlementGuard entitlementGuard;
 
   public CrmLeadController(
       CrmLeadService leadService,
       AssignmentService assignmentService,
       LeadImportService importService,
+      TimelineService timelineService,
       CrmEntitlementGuard entitlementGuard) {
     this.leadService = leadService;
     this.assignmentService = assignmentService;
     this.importService = importService;
+    this.timelineService = timelineService;
     this.entitlementGuard = entitlementGuard;
   }
 
@@ -97,6 +101,27 @@ public class CrmLeadController {
   public LeadResponse assign(@PathVariable Long id, @RequestBody AssignRequest body) {
     entitlementGuard.requireCrmAccess();
     return assignmentService.assign(id, body == null ? new AssignRequest("ROUND_ROBIN", null, null) : body);
+  }
+
+  @PostMapping("/{id}/stage/{stageId}")
+  public LeadResponse moveStage(@PathVariable Long id, @PathVariable Long stageId) {
+    entitlementGuard.requireCrmAccess();
+    return leadService.moveStage(id, stageId);
+  }
+
+  @GetMapping("/{id}/timeline")
+  public java.util.List<com.shopmanagement.crmservice.api.CrmLeadApi.TimelineItem> timeline(
+      @PathVariable Long id) {
+    entitlementGuard.requireCrmAccess();
+    return timelineService.leadTimeline(id);
+  }
+
+  @PostMapping("/{id}/notes")
+  @ResponseStatus(HttpStatus.CREATED)
+  public com.shopmanagement.crmservice.api.CrmLeadApi.NoteResponse addNote(
+      @PathVariable Long id, @Valid @RequestBody com.shopmanagement.crmservice.api.CrmLeadApi.NoteRequest body) {
+    entitlementGuard.requireCrmAccess();
+    return timelineService.addLeadNote(id, body);
   }
 
   @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

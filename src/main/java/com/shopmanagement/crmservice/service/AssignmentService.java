@@ -3,6 +3,7 @@ package com.shopmanagement.crmservice.service;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,16 +29,19 @@ public class AssignmentService {
   private final CrmRrCursorRepository cursorRepository;
   private final CrmLeadRepository leadRepository;
   private final CrmLeadService leadService;
+  private final TimelineService timelineService;
 
   public AssignmentService(
       CrmTeamMemberRepository memberRepository,
       CrmRrCursorRepository cursorRepository,
       CrmLeadRepository leadRepository,
-      CrmLeadService leadService) {
+      CrmLeadService leadService,
+      TimelineService timelineService) {
     this.memberRepository = memberRepository;
     this.cursorRepository = cursorRepository;
     this.leadRepository = leadRepository;
     this.leadService = leadService;
+    this.timelineService = timelineService;
   }
 
   @Transactional
@@ -112,6 +116,12 @@ public class AssignmentService {
     }
     lead.touch();
     leadRepository.save(lead);
+    timelineService.recordEvent(
+        "LEAD",
+        leadId,
+        "ASSIGNED",
+        "Assigned to " + lead.getOwnerUserId() + " (" + mode + ")",
+        Map.of("mode", mode, "ownerUserId", lead.getOwnerUserId(), "teamId", teamId));
     return leadService.get(leadId);
   }
 

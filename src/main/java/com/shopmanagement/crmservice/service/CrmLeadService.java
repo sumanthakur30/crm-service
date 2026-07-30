@@ -33,16 +33,19 @@ public class CrmLeadService {
   private final CrmPipelineRepository pipelineRepository;
   private final CrmStageRepository stageRepository;
   private final WorkspaceBootstrapService workspaceBootstrapService;
+  private final TimelineService timelineService;
 
   public CrmLeadService(
       CrmLeadRepository leadRepository,
       CrmPipelineRepository pipelineRepository,
       CrmStageRepository stageRepository,
-      WorkspaceBootstrapService workspaceBootstrapService) {
+      WorkspaceBootstrapService workspaceBootstrapService,
+      TimelineService timelineService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
     this.workspaceBootstrapService = workspaceBootstrapService;
+    this.timelineService = timelineService;
   }
 
   @Transactional
@@ -57,7 +60,14 @@ public class CrmLeadService {
     if (lead.getOwnerUserId() == null) {
       lead.setOwnerUserId(TenantIds.currentUserOrNull());
     }
-    return toResponse(leadRepository.save(lead));
+    lead = leadRepository.save(lead);
+    timelineService.recordEvent(
+        "LEAD",
+        lead.getId(),
+        "LEAD_CREATED",
+        "Lead created: " + lead.getTitle(),
+        Map.of("stageId", lead.getStageId(), "status", lead.getStatus()));
+    return toResponse(lead);
   }
 
   @Transactional
@@ -78,6 +88,8 @@ public class CrmLeadService {
   public LeadResponse patchStatus(Long id, LeadStatusPatch body) {
     String tenantId = TenantIds.require();
     CrmLeadEntity lead = requireLead(tenantId, id);
+    Long previousStage = lead.getStageId();
+    String previousStatus = lead.getStatus();
     String status = normalizeStatus(body.status());
     lead.setStatus(status);
     if (body.stageId() != null) {
@@ -91,7 +103,26 @@ public class CrmLeadService {
       lead.setAttributes(attrs);
     }
     lead.touch();
-    return toResponse(leadRepository.save(lead));
+    lead = leadRepository.save(lead);
+    timelineService.recordEvent(
+        "LEAD",
+        lead.getId(),
+        "STATUS_CHANGED",
+        "Status " + previousStatus + " → " + lead.getStatus()
+            + (previousStage.equals(lead.getStageId()) ? "" : (" · stage " + previousStage + " → " + lead.getStageId())),
+        Map.of(
+            "fromStatus", previousStatus,
+            "toStatus", lead.getStatus(),
+            "fromStageId", previousStage,
+            "toStageId", lead.getStageId()));
+    return toResponse(lead);
+  }
+
+  @Transactional
+  public LeadResponse moveStage(Long id, Long stageId) {
+    String tenantId = TenantIds.require();
+    CrmLeadEntity lead = requireLead(tenantId, id);
+    return patchStatus(id, new LeadStatusPatch(lead.getStatus(), stageId, null));
   }
 
   @Transactional(readOnly = true)

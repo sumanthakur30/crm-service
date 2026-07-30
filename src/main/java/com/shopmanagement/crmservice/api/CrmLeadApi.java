@@ -88,4 +88,18 @@ public final class CrmLeadApi {
       Long id, String teamId, String userId, String displayName, boolean active, int sortOrder) {}
 
   public record ImportResult(int totalRows, int created, int skipped, List<String> errors) {}
+
+  public record NoteRequest(@NotBlank String body) {}
+
+  public record NoteResponse(
+      Long id, String relatedType, Long relatedId, String body, String authorUserId, Instant createdAt) {}
+
+  public record TimelineItem(
+      String kind,
+      Long id,
+      String eventType,
+      String summary,
+      String actorUserId,
+      Instant occurredAt,
+      Map<String, Object> payload) {}
 }
