@@ -1,6 +1,7 @@
 package com.shopmanagement.crmservice.service;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,8 @@ import com.shopmanagement.crmservice.persistence.repo.CrmPipelineRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmWorkspaceRepository;
 import com.shopmanagement.crmservice.support.TenantIds;
+import com.shopmanagement.crmservice.template.IndustryTemplate;
+import com.shopmanagement.crmservice.template.IndustryTemplateLoader;
 
 @Service
 public class WorkspaceBootstrapService {
@@ -25,30 +28,48 @@ public class WorkspaceBootstrapService {
   private final CrmWorkspaceRepository workspaceRepository;
   private final CrmPipelineRepository pipelineRepository;
   private final CrmStageRepository stageRepository;
+  private final IndustryTemplateLoader templateLoader;
 
   public WorkspaceBootstrapService(
       CrmWorkspaceRepository workspaceRepository,
       CrmPipelineRepository pipelineRepository,
-      CrmStageRepository stageRepository) {
+      CrmStageRepository stageRepository,
+      IndustryTemplateLoader templateLoader) {
     this.workspaceRepository = workspaceRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
+    this.templateLoader = templateLoader;
   }
 
   @Transactional
   public WorkspaceResponse bootstrap(WorkspaceBootstrapRequest request) {
     String tenantId = TenantIds.require();
+    String templateCode =
+        request != null && request.templateCode() != null && !request.templateCode().isBlank()
+            ? request.templateCode().trim().toUpperCase(Locale.ROOT)
+            : "GENERIC";
+    IndustryTemplate template = templateLoader.get(templateCode);
+
     CrmWorkspaceEntity workspace =
         workspaceRepository
             .findByTenantIdAndDeletedAtIsNull(tenantId)
-            .orElseGet(() -> createWorkspace(tenantId, request));
+            .orElseGet(() -> createWorkspace(tenantId, request, template));
 
-    CrmPipelineEntity pipeline =
+    if (workspace.getTemplateCode() == null || workspace.getTemplateCode().isBlank()) {
+      workspace.setTemplateCode(template.code());
+      workspaceRepository.save(workspace);
+    }
+
+    CrmPipelineEntity leadPipeline =
         pipelineRepository
             .findFirstByTenantIdAndIsDefaultTrueAndDeletedAtIsNull(tenantId)
-            .orElseGet(() -> createDefaultPipeline(tenantId));
+            .orElseGet(() -> createPipelineFromSpec(tenantId, template.leadPipeline(), "LEAD", true, 10));
 
-    return toResponse(workspace, pipeline.getId());
+    pipelineRepository
+        .findByTenantIdAndCodeAndDeletedAtIsNull(tenantId, template.opportunityPipeline().code())
+        .orElseGet(() -> createPipelineFromSpec(tenantId, template.opportunityPipeline(), "OPPORTUNITY", false, 20));
+
+    return toResponse(workspace, leadPipeline.getId());
   }
 
   @Transactional(readOnly = true)
@@ -100,51 +121,88 @@ public class WorkspaceBootstrapService {
         .toList();
   }
 
-  /** Ensures workspace + default pipeline exist; returns default pipeline id. */
+  @Transactional(readOnly = true)
+  public List<String> listTemplates() {
+    return templateLoader.listCodes();
+  }
+
   @Transactional
   public CrmPipelineEntity ensureDefaultPipeline() {
     String tenantId = TenantIds.require();
     workspaceRepository
         .findByTenantIdAndDeletedAtIsNull(tenantId)
-        .orElseGet(() -> createWorkspace(tenantId, new WorkspaceBootstrapRequest(null, "GENERIC")));
+        .orElseGet(() -> createWorkspace(tenantId, new WorkspaceBootstrapRequest(null, "GENERIC"), templateLoader.get("GENERIC")));
     return pipelineRepository
         .findFirstByTenantIdAndIsDefaultTrueAndDeletedAtIsNull(tenantId)
-        .orElseGet(() -> createDefaultPipeline(tenantId));
+        .orElseGet(
+            () ->
+                createPipelineFromSpec(
+                    tenantId, templateLoader.get("GENERIC").leadPipeline(), "LEAD", true, 10));
   }
 
-  private CrmWorkspaceEntity createWorkspace(String tenantId, WorkspaceBootstrapRequest request) {
+  @Transactional
+  public CrmPipelineEntity ensureOpportunityPipeline() {
+    String tenantId = TenantIds.require();
+    CrmWorkspaceEntity ws =
+        workspaceRepository
+            .findByTenantIdAndDeletedAtIsNull(tenantId)
+            .orElseGet(
+                () ->
+                    createWorkspace(
+                        tenantId,
+                        new WorkspaceBootstrapRequest(null, "GENERIC"),
+                        templateLoader.get("GENERIC")));
+    IndustryTemplate template = templateLoader.get(ws.getTemplateCode());
+    return pipelineRepository
+        .findByTenantIdAndCodeAndDeletedAtIsNull(tenantId, template.opportunityPipeline().code())
+        .or(
+            () ->
+                pipelineRepository.findByTenantIdAndDeletedAtIsNullOrderBySortOrderAsc(tenantId).stream()
+                    .filter(p -> "OPPORTUNITY".equalsIgnoreCase(p.getObjectType()))
+                    .findFirst())
+        .orElseGet(
+            () -> createPipelineFromSpec(tenantId, template.opportunityPipeline(), "OPPORTUNITY", false, 20));
+  }
+
+  private CrmWorkspaceEntity createWorkspace(
+      String tenantId, WorkspaceBootstrapRequest request, IndustryTemplate template) {
     CrmWorkspaceEntity ws = new CrmWorkspaceEntity();
     ws.setTenantId(tenantId);
     String name =
         request != null && request.name() != null && !request.name().isBlank()
             ? request.name().trim()
-            : "CRM Workspace";
+            : template.name();
     ws.setName(name);
-    String template =
-        request != null && request.templateCode() != null && !request.templateCode().isBlank()
-            ? request.templateCode().trim().toUpperCase()
-            : "GENERIC";
-    ws.setTemplateCode(template);
+    ws.setTemplateCode(template.code());
     return workspaceRepository.save(ws);
   }
 
-  private CrmPipelineEntity createDefaultPipeline(String tenantId) {
+  private CrmPipelineEntity createPipelineFromSpec(
+      String tenantId,
+      IndustryTemplate.PipelineSpec spec,
+      String objectType,
+      boolean isDefault,
+      int sortOrder) {
     CrmPipelineEntity pipeline = new CrmPipelineEntity();
     pipeline.setTenantId(tenantId);
-    pipeline.setCode("SALES");
-    pipeline.setName("Sales Pipeline");
-    pipeline.setObjectType("LEAD");
-    pipeline.setDefault(true);
+    pipeline.setCode(spec.code());
+    pipeline.setName(spec.name());
+    pipeline.setObjectType(objectType);
+    pipeline.setDefault(isDefault);
     pipeline.setActive(true);
-    pipeline.setSortOrder(10);
+    pipeline.setSortOrder(sortOrder);
     pipeline = pipelineRepository.save(pipeline);
-
-    seedStage(tenantId, pipeline.getId(), "NEW", "New", 10, 10, false, false);
-    seedStage(tenantId, pipeline.getId(), "CONTACTED", "Contacted", 20, 25, false, false);
-    seedStage(tenantId, pipeline.getId(), "QUALIFIED", "Qualified", 30, 50, false, false);
-    seedStage(tenantId, pipeline.getId(), "PROPOSAL", "Proposal", 40, 75, false, false);
-    seedStage(tenantId, pipeline.getId(), "WON", "Won", 50, 100, true, false);
-    seedStage(tenantId, pipeline.getId(), "LOST", "Lost", 60, 0, false, true);
+    for (IndustryTemplate.StageSpec stage : spec.stages()) {
+      seedStage(
+          tenantId,
+          pipeline.getId(),
+          stage.code(),
+          stage.name(),
+          stage.sortOrder(),
+          stage.probability(),
+          stage.won(),
+          stage.lost());
+    }
     return pipeline;
   }
 

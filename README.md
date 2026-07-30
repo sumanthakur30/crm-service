@@ -7,18 +7,23 @@ Generic, business-agnostic CRM bounded context for SugamFlow.
 - API prefix: `/api/v1/crm/**` (gateway route reserved in Phase 0)
 - Does **not** own `/api/v1/leads` (Field Force)
 
-## Phase 1 scope
+## Phase 1–2 scope
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/v1/crm/status` | Health-ish status (no tenant) |
-| `POST /api/v1/crm/workspaces/bootstrap` | Create workspace + default Sales pipeline |
+| `GET /api/v1/crm/status` | Health-ish status (phase `2`) |
+| `GET /api/v1/crm/templates` | Industry template codes |
+| `POST /api/v1/crm/workspaces/bootstrap` | Workspace + lead + opportunity pipelines from template |
 | `GET /api/v1/crm/pipelines` | List pipelines |
 | `GET /api/v1/crm/pipelines/{id}/stages` | List stages |
 | `POST/GET/PUT/PATCH/DELETE /api/v1/crm/leads` | Lead CRUD |
 | `POST /api/v1/crm/leads/{id}/assign` | MANUAL or ROUND_ROBIN assign |
 | `POST /api/v1/crm/leads/import` | CSV / XLSX multipart import |
 | `POST/GET/DELETE /api/v1/crm/assignment/members` | Team members for round-robin |
+| `POST/GET/PUT /api/v1/crm/opportunities/**` | Opportunity CRUD + stage move |
+| `POST/GET /api/v1/crm/quotations/**` | GST quotation create/list/send/accept |
+
+Templates: `GENERIC`, `EDUCATION`, `RETAIL`, `MEDICAL_DISTRIBUTOR` (classpath `crm-templates/*.json`).
 
 ### CSV / Excel columns
 

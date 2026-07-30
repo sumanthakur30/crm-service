@@ -1,0 +1,26 @@
+{
+  "code": "EDUCATION",
+  "name": "Education / School admissions",
+  "leadPipeline": {
+    "code": "ADMISSION",
+    "name": "Admission Inquiry",
+    "stages": [
+      { "code": "INQUIRY", "name": "Inquiry", "sortOrder": 10, "probability": 15 },
+      { "code": "COUNSELING", "name": "Counseling", "sortOrder": 20, "probability": 35 },
+      { "code": "APPLICATION", "name": "Application", "sortOrder": 30, "probability": 55 },
+      { "code": "FEE_QUOTE", "name": "Fee quote", "sortOrder": 40, "probability": 75 },
+      { "code": "ENROLLED", "name": "Enrolled", "sortOrder": 50, "probability": 100, "won": true },
+      { "code": "DROPPED", "name": "Dropped", "sortOrder": 60, "probability": 0, "lost": true }
+    ]
+  },
+  "opportunityPipeline": {
+    "code": "ADMISSION_DEAL",
+    "name": "Admission deal",
+    "stages": [
+      { "code": "FEE_DISCUSSION", "name": "Fee discussion", "sortOrder": 10, "probability": 40 },
+      { "code": "DOCUMENTATION", "name": "Documentation", "sortOrder": 20, "probability": 70 },
+      { "code": "ENROLLED", "name": "Enrolled", "sortOrder": 30, "probability": 100, "won": true },
+      { "code": "LOST", "name": "Lost", "sortOrder": 40, "probability": 0, "lost": true }
+    ]
+  }
+}

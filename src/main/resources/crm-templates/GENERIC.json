@@ -1,0 +1,27 @@
+{
+  "code": "GENERIC",
+  "name": "Generic Sales",
+  "leadPipeline": {
+    "code": "SALES",
+    "name": "Sales Pipeline",
+    "stages": [
+      { "code": "NEW", "name": "New", "sortOrder": 10, "probability": 10 },
+      { "code": "CONTACTED", "name": "Contacted", "sortOrder": 20, "probability": 25 },
+      { "code": "QUALIFIED", "name": "Qualified", "sortOrder": 30, "probability": 50 },
+      { "code": "PROPOSAL", "name": "Proposal", "sortOrder": 40, "probability": 75 },
+      { "code": "WON", "name": "Won", "sortOrder": 50, "probability": 100, "won": true },
+      { "code": "LOST", "name": "Lost", "sortOrder": 60, "probability": 0, "lost": true }
+    ]
+  },
+  "opportunityPipeline": {
+    "code": "DEALS",
+    "name": "Deal Pipeline",
+    "stages": [
+      { "code": "DISCOVERY", "name": "Discovery", "sortOrder": 10, "probability": 20 },
+      { "code": "PROPOSAL", "name": "Proposal", "sortOrder": 20, "probability": 50 },
+      { "code": "NEGOTIATION", "name": "Negotiation", "sortOrder": 30, "probability": 70 },
+      { "code": "WON", "name": "Won", "sortOrder": 40, "probability": 100, "won": true },
+      { "code": "LOST", "name": "Lost", "sortOrder": 50, "probability": 0, "lost": true }
+    ]
+  }
+}

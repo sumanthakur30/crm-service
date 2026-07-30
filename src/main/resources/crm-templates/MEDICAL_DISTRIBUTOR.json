@@ -1,0 +1,26 @@
+{
+  "code": "MEDICAL_DISTRIBUTOR",
+  "name": "Medical distributor / retailer onboarding",
+  "leadPipeline": {
+    "code": "DEALER",
+    "name": "Dealer onboarding",
+    "stages": [
+      { "code": "PROSPECT", "name": "Prospect", "sortOrder": 10, "probability": 15 },
+      { "code": "VISIT", "name": "Field visit", "sortOrder": 20, "probability": 35 },
+      { "code": "KYC", "name": "KYC / credit", "sortOrder": 30, "probability": 55 },
+      { "code": "SCHEME", "name": "Scheme / rate card", "sortOrder": 40, "probability": 75 },
+      { "code": "ONBOARDED", "name": "Onboarded", "sortOrder": 50, "probability": 100, "won": true },
+      { "code": "REJECTED", "name": "Rejected", "sortOrder": 60, "probability": 0, "lost": true }
+    ]
+  },
+  "opportunityPipeline": {
+    "code": "DISTRIBUTOR_DEAL",
+    "name": "Distributor deal",
+    "stages": [
+      { "code": "RATE_CARD", "name": "Rate card", "sortOrder": 10, "probability": 40 },
+      { "code": "CREDIT_APPROVAL", "name": "Credit approval", "sortOrder": 20, "probability": 70 },
+      { "code": "FIRST_ORDER", "name": "First order", "sortOrder": 30, "probability": 100, "won": true },
+      { "code": "LOST", "name": "Lost", "sortOrder": 40, "probability": 0, "lost": true }
+    ]
+  }
+}

@@ -37,7 +37,7 @@ public class CrmWorkspaceController {
 
   @GetMapping("/status")
   public StatusResponse status() {
-    return new StatusResponse("crm-service", "1", crmProperties.isEnabled());
+    return new StatusResponse("crm-service", "2", crmProperties.isEnabled());
   }
 
   @PostMapping("/workspaces/bootstrap")
@@ -63,5 +63,10 @@ public class CrmWorkspaceController {
   public List<StageResponse> stages(@PathVariable Long pipelineId) {
     entitlementGuard.requireCrmAccess();
     return workspaceBootstrapService.listStages(pipelineId);
+  }
+
+  @GetMapping("/templates")
+  public List<String> templates() {
+    return workspaceBootstrapService.listTemplates();
   }
 }

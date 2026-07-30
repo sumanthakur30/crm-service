@@ -1,0 +1,96 @@
+package com.shopmanagement.crmservice.api;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+public final class CrmDealApi {
+
+  private CrmDealApi() {}
+
+  public record OpportunityUpsert(
+      @NotBlank @Size(max = 256) String name,
+      Long leadId,
+      Long pipelineId,
+      Long stageId,
+      BigDecimal amount,
+      @Size(max = 8) String currency,
+      @Min(0) @Max(100) Integer probability,
+      LocalDate expectedCloseDate,
+      @Size(max = 32) String status,
+      @Size(max = 64) String ownerUserId,
+      @Size(max = 64) String teamId,
+      Map<String, Object> attributes) {}
+
+  public record OpportunityResponse(
+      Long id,
+      String tenantId,
+      Long pipelineId,
+      Long stageId,
+      Long leadId,
+      String name,
+      BigDecimal amount,
+      String currency,
+      int probability,
+      LocalDate expectedCloseDate,
+      String status,
+      String ownerUserId,
+      String teamId,
+      Map<String, Object> attributes,
+      Instant createdAt,
+      Instant updatedAt) {}
+
+  public record QuoteLine(
+      @NotBlank String description,
+      String hsn,
+      @NotNull BigDecimal qty,
+      @NotNull BigDecimal unitPrice,
+      @NotNull BigDecimal gstRate,
+      BigDecimal discount) {}
+
+  public record QuotationUpsert(
+      @NotNull Long opportunityId,
+      String customerName,
+      String customerGstin,
+      String placeOfSupply,
+      String sellerStateCode,
+      String buyerStateCode,
+      String currency,
+      BigDecimal discountAmount,
+      String terms,
+      LocalDate validUntil,
+      List<QuoteLine> lines) {}
+
+  public record QuotationResponse(
+      Long id,
+      Long opportunityId,
+      String quoteNumber,
+      int versionNo,
+      String status,
+      String customerName,
+      String customerGstin,
+      String placeOfSupply,
+      String sellerStateCode,
+      String buyerStateCode,
+      String currency,
+      BigDecimal taxableAmount,
+      BigDecimal cgstAmount,
+      BigDecimal sgstAmount,
+      BigDecimal igstAmount,
+      BigDecimal totalAmount,
+      BigDecimal discountAmount,
+      String terms,
+      List<Map<String, Object>> lines,
+      Map<String, Object> sharePayload,
+      LocalDate validUntil,
+      Instant acceptedAt,
+      Instant createdAt) {}
+}

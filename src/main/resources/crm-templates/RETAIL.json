@@ -1,0 +1,25 @@
+{
+  "code": "RETAIL",
+  "name": "Retail / walk-in & Meta leads",
+  "leadPipeline": {
+    "code": "RETAIL_SALES",
+    "name": "Retail sales",
+    "stages": [
+      { "code": "WALKIN", "name": "Walk-in / inbound", "sortOrder": 10, "probability": 20 },
+      { "code": "DEMO", "name": "Demo / trial", "sortOrder": 20, "probability": 45 },
+      { "code": "QUOTE", "name": "Quote", "sortOrder": 30, "probability": 70 },
+      { "code": "SOLD", "name": "Sold", "sortOrder": 40, "probability": 100, "won": true },
+      { "code": "LOST", "name": "Lost", "sortOrder": 50, "probability": 0, "lost": true }
+    ]
+  },
+  "opportunityPipeline": {
+    "code": "RETAIL_DEAL",
+    "name": "Retail deal",
+    "stages": [
+      { "code": "INTEREST", "name": "Interest", "sortOrder": 10, "probability": 30 },
+      { "code": "NEGOTIATION", "name": "Negotiation", "sortOrder": 20, "probability": 65 },
+      { "code": "CLOSED", "name": "Closed won", "sortOrder": 30, "probability": 100, "won": true },
+      { "code": "LOST", "name": "Lost", "sortOrder": 40, "probability": 0, "lost": true }
+    ]
+  }
+}
