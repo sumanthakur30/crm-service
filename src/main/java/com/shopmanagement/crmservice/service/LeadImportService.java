@@ -112,7 +112,13 @@ public class LeadImportService {
                 null,
                 extraAttributes(row),
                 Map.of(),
-                first(row, "form_key"));
+                first(row, "form_key"),
+                parseLong(first(row, "campaign_id")),
+                first(row, "utm_source"),
+                first(row, "utm_medium"),
+                first(row, "utm_campaign"),
+                first(row, "utm_content"),
+                first(row, "utm_term"));
         LeadResponse lead = leadService.create(upsert);
         if (assignRoundRobin) {
           assignmentService.assign(
@@ -174,7 +180,13 @@ public class LeadImportService {
           "value",
           "deal_value",
           "currency",
-          "form_key" -> true;
+          "form_key",
+          "campaign_id",
+          "utm_source",
+          "utm_medium",
+          "utm_campaign",
+          "utm_content",
+          "utm_term" -> true;
       default -> false;
     };
   }
@@ -188,6 +200,17 @@ public class LeadImportService {
       }
     }
     return null;
+  }
+
+  private static Long parseLong(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    try {
+      return Long.parseLong(raw.trim());
+    } catch (NumberFormatException ex) {
+      return null;
+    }
   }
 
   private static Integer parseScore(String raw) {

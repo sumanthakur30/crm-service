@@ -32,7 +32,13 @@ public final class CrmLeadApi {
       Long stageId,
       Map<String, Object> attributes,
       Map<String, Object> externalRefs,
-      @Size(max = 128) String formKey) {}
+      @Size(max = 128) String formKey,
+      Long campaignId,
+      @Size(max = 128) String utmSource,
+      @Size(max = 128) String utmMedium,
+      @Size(max = 128) String utmCampaign,
+      @Size(max = 128) String utmContent,
+      @Size(max = 128) String utmTerm) {}
 
   public record LeadStatusPatch(
       @NotBlank @Size(max = 32) String status, Long stageId, @Size(max = 64) String lostReasonCode) {}
@@ -58,6 +64,12 @@ public final class CrmLeadApi {
       Map<String, Object> attributes,
       Map<String, Object> externalRefs,
       String formKey,
+      Long campaignId,
+      String utmSource,
+      String utmMedium,
+      String utmCampaign,
+      String utmContent,
+      String utmTerm,
       Instant createdAt,
       Instant updatedAt) {}
 

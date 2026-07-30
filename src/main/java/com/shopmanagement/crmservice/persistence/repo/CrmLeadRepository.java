@@ -33,6 +33,26 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
 
   @Query(
       """
+      SELECT COALESCE(l.utmSource, 'UNKNOWN'), COUNT(l)
+      FROM CrmLeadEntity l
+      WHERE l.tenantId = :tenantId AND l.deletedAt IS NULL
+      GROUP BY COALESCE(l.utmSource, 'UNKNOWN')
+      ORDER BY COUNT(l) DESC
+      """)
+  List<Object[]> countByUtmSource(@Param("tenantId") String tenantId);
+
+  @Query(
+      """
+      SELECT l.campaignId, COUNT(l)
+      FROM CrmLeadEntity l
+      WHERE l.tenantId = :tenantId AND l.deletedAt IS NULL AND l.campaignId IS NOT NULL
+      GROUP BY l.campaignId
+      ORDER BY COUNT(l) DESC
+      """)
+  List<Object[]> countByCampaign(@Param("tenantId") String tenantId);
+
+  @Query(
+      """
       SELECT l.stageId, COUNT(l)
       FROM CrmLeadEntity l
       WHERE l.tenantId = :tenantId AND l.deletedAt IS NULL

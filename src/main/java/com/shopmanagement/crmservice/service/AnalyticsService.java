@@ -11,7 +11,9 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.shopmanagement.crmservice.persistence.entity.CrmCampaignEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmStageEntity;
+import com.shopmanagement.crmservice.persistence.repo.CrmCampaignRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmOpportunityRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageRepository;
@@ -25,16 +27,19 @@ public class AnalyticsService {
   private final CrmOpportunityRepository opportunityRepository;
   private final CrmStageRepository stageRepository;
   private final CrmTaskRepository taskRepository;
+  private final CrmCampaignRepository campaignRepository;
 
   public AnalyticsService(
       CrmLeadRepository leadRepository,
       CrmOpportunityRepository opportunityRepository,
       CrmStageRepository stageRepository,
-      CrmTaskRepository taskRepository) {
+      CrmTaskRepository taskRepository,
+      CrmCampaignRepository campaignRepository) {
     this.leadRepository = leadRepository;
     this.opportunityRepository = opportunityRepository;
     this.stageRepository = stageRepository;
     this.taskRepository = taskRepository;
+    this.campaignRepository = campaignRepository;
   }
 
   @Transactional(readOnly = true)
@@ -63,6 +68,28 @@ public class AnalyticsService {
       sources.add(m);
     }
 
+    Map<Long, String> campaignNames =
+        campaignRepository.findByTenantIdAndDeletedAtIsNullOrderByCreatedAtDesc(tenantId).stream()
+            .collect(Collectors.toMap(CrmCampaignEntity::getId, CrmCampaignEntity::getName, (a, b) -> a));
+
+    List<Map<String, Object>> campaigns = new ArrayList<>();
+    for (Object[] row : leadRepository.countByCampaign(tenantId)) {
+      Long campaignId = (Long) row[0];
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("campaignId", campaignId);
+      m.put("campaignName", campaignNames.getOrDefault(campaignId, String.valueOf(campaignId)));
+      m.put("count", row[1]);
+      campaigns.add(m);
+    }
+
+    List<Map<String, Object>> utmSources = new ArrayList<>();
+    for (Object[] row : leadRepository.countByUtmSource(tenantId)) {
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("utmSource", row[0]);
+      m.put("count", row[1]);
+      utmSources.add(m);
+    }
+
     List<Map<String, Object>> dealFunnel = new ArrayList<>();
     for (Object[] row : opportunityRepository.openFunnelByStage(tenantId)) {
       Long stageId = (Long) row[0];
@@ -83,6 +110,8 @@ public class AnalyticsService {
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("leadFunnel", leadFunnel);
     out.put("leadSources", sources);
+    out.put("campaigns", campaigns);
+    out.put("utmSources", utmSources);
     out.put("dealFunnel", dealFunnel);
     out.put("openDeals", opportunityRepository.countByTenantIdAndStatusAndDeletedAtIsNull(tenantId, "OPEN"));
     out.put("wonDeals", opportunityRepository.countByTenantIdAndStatusAndDeletedAtIsNull(tenantId, "WON"));

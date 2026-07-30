@@ -31,6 +31,7 @@ class CrmLeadServiceTest {
   @Mock private CrmLeadRepository leadRepository;
   @Mock private CrmPipelineRepository pipelineRepository;
   @Mock private CrmStageRepository stageRepository;
+  @Mock private com.shopmanagement.crmservice.persistence.repo.CrmCampaignRepository campaignRepository;
   @Mock private WorkspaceBootstrapService workspaceBootstrapService;
   @Mock private TimelineService timelineService;
 
@@ -91,6 +92,12 @@ class CrmLeadServiceTest {
                 null,
                 MapAttrs.empty(),
                 MapAttrs.empty(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null));
 
     assertThat(response.id()).isEqualTo(99L);

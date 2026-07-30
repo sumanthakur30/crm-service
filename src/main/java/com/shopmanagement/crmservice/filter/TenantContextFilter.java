@@ -84,6 +84,12 @@ public class TenantContextFilter extends OncePerRequestFilter {
         || uri.startsWith("/swagger-ui")
         || uri.startsWith("/v3/api-docs")
         || uri.startsWith("/webjars")
-        || uri.equals("/api/v1/crm/status");
+        || uri.equals("/api/v1/crm/status")
+        || uri.startsWith("/api/v1/crm/public/");
+  }
+
+  /** Bind tenant for public capture after resolving campaign. */
+  public static void bindTenant(String tenantId) {
+    CURRENT_TENANT.set(tenantId);
   }
 }

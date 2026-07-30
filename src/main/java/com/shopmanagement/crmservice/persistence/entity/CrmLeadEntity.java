@@ -81,4 +81,22 @@ public class CrmLeadEntity extends TenantAuditableEntity {
 
   @Column(name = "form_key", length = 128)
   private String formKey;
+
+  @Column(name = "campaign_id")
+  private Long campaignId;
+
+  @Column(name = "utm_source", length = 128)
+  private String utmSource;
+
+  @Column(name = "utm_medium", length = 128)
+  private String utmMedium;
+
+  @Column(name = "utm_campaign", length = 128)
+  private String utmCampaign;
+
+  @Column(name = "utm_content", length = 128)
+  private String utmContent;
+
+  @Column(name = "utm_term", length = 128)
+  private String utmTerm;
 }

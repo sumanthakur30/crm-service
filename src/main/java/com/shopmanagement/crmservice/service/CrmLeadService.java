@@ -18,6 +18,7 @@ import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmPipelineEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmStageEntity;
+import com.shopmanagement.crmservice.persistence.repo.CrmCampaignRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmPipelineRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageRepository;
@@ -32,6 +33,7 @@ public class CrmLeadService {
   private final CrmLeadRepository leadRepository;
   private final CrmPipelineRepository pipelineRepository;
   private final CrmStageRepository stageRepository;
+  private final CrmCampaignRepository campaignRepository;
   private final WorkspaceBootstrapService workspaceBootstrapService;
   private final TimelineService timelineService;
 
@@ -39,11 +41,13 @@ public class CrmLeadService {
       CrmLeadRepository leadRepository,
       CrmPipelineRepository pipelineRepository,
       CrmStageRepository stageRepository,
+      CrmCampaignRepository campaignRepository,
       WorkspaceBootstrapService workspaceBootstrapService,
       TimelineService timelineService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
+    this.campaignRepository = campaignRepository;
     this.workspaceBootstrapService = workspaceBootstrapService;
     this.timelineService = timelineService;
   }
@@ -227,6 +231,29 @@ public class CrmLeadService {
     if (body.formKey() != null) {
       lead.setFormKey(blankToNull(body.formKey()));
     }
+    if (body.campaignId() != null) {
+      campaignRepository
+          .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), body.campaignId())
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid campaignId"));
+      lead.setCampaignId(body.campaignId());
+    } else if (creating) {
+      lead.setCampaignId(null);
+    }
+    if (body.utmSource() != null) {
+      lead.setUtmSource(blankToNull(body.utmSource()));
+    }
+    if (body.utmMedium() != null) {
+      lead.setUtmMedium(blankToNull(body.utmMedium()));
+    }
+    if (body.utmCampaign() != null) {
+      lead.setUtmCampaign(blankToNull(body.utmCampaign()));
+    }
+    if (body.utmContent() != null) {
+      lead.setUtmContent(blankToNull(body.utmContent()));
+    }
+    if (body.utmTerm() != null) {
+      lead.setUtmTerm(blankToNull(body.utmTerm()));
+    }
   }
 
   private static String normalizeStatus(String status) {
@@ -271,6 +298,12 @@ public class CrmLeadService {
         lead.getAttributes(),
         lead.getExternalRefs(),
         lead.getFormKey(),
+        lead.getCampaignId(),
+        lead.getUtmSource(),
+        lead.getUtmMedium(),
+        lead.getUtmCampaign(),
+        lead.getUtmContent(),
+        lead.getUtmTerm(),
         lead.getCreatedAt(),
         lead.getUpdatedAt());
   }

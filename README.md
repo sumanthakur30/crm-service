@@ -25,7 +25,8 @@ Generic, business-agnostic CRM bounded context for SugamFlow.
 | `GET/POST /api/v1/crm/sequences/**` | Comms sequences + enroll + process-due |
 | `GET /api/v1/crm/analytics/summary` | Funnel / sources / overdue tasks |
 | `GET/POST /api/v1/crm/tasks/**` | SLA aging + open tasks |
-| `POST /api/v1/crm/leads/{id}/convert` | ERP convert adapters (shop/school/FF) |
+| `GET/POST /api/v1/crm/campaigns` | Campaign CRUD + public capture key |
+| `POST /api/v1/crm/public/capture/{publicKey}` | Public lead ingest with UTM (no tenant header) |
 
 Templates: `GENERIC`, `EDUCATION`, `RETAIL`, `MEDICAL_DISTRIBUTOR` (classpath `crm-templates/*.json`).
 
