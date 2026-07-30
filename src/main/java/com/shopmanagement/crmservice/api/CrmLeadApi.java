@@ -2,6 +2,7 @@ package com.shopmanagement.crmservice.api;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import jakarta.validation.constraints.Max;
@@ -78,4 +79,13 @@ public final class CrmLeadApi {
       Long id, Long pipelineId, String code, String name, int sortOrder, int probability, boolean won, boolean lost) {}
 
   public record StatusResponse(String service, String phase, boolean entitlementCheckEnabled) {}
+
+  public record AssignRequest(String mode, String ownerUserId, String teamId) {}
+
+  public record TeamMemberRequest(String teamId, String userId, String displayName, Boolean active, Integer sortOrder) {}
+
+  public record TeamMemberResponse(
+      Long id, String teamId, String userId, String displayName, boolean active, int sortOrder) {}
+
+  public record ImportResult(int totalRows, int created, int skipped, List<String> errors) {}
 }

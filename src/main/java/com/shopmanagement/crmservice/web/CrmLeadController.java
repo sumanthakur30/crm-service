@@ -3,6 +3,7 @@ package com.shopmanagement.crmservice.web;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -14,12 +15,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.shopmanagement.crmservice.api.CrmLeadApi.AssignRequest;
+import com.shopmanagement.crmservice.api.CrmLeadApi.ImportResult;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadStatusPatch;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
+import com.shopmanagement.crmservice.service.AssignmentService;
 import com.shopmanagement.crmservice.service.CrmLeadService;
+import com.shopmanagement.crmservice.service.LeadImportService;
 
 import jakarta.validation.Valid;
 
@@ -28,10 +34,18 @@ import jakarta.validation.Valid;
 public class CrmLeadController {
 
   private final CrmLeadService leadService;
+  private final AssignmentService assignmentService;
+  private final LeadImportService importService;
   private final CrmEntitlementGuard entitlementGuard;
 
-  public CrmLeadController(CrmLeadService leadService, CrmEntitlementGuard entitlementGuard) {
+  public CrmLeadController(
+      CrmLeadService leadService,
+      AssignmentService assignmentService,
+      LeadImportService importService,
+      CrmEntitlementGuard entitlementGuard) {
     this.leadService = leadService;
+    this.assignmentService = assignmentService;
+    this.importService = importService;
     this.entitlementGuard = entitlementGuard;
   }
 
@@ -77,5 +91,19 @@ public class CrmLeadController {
   public void delete(@PathVariable Long id) {
     entitlementGuard.requireCrmAccess();
     leadService.delete(id);
+  }
+
+  @PostMapping("/{id}/assign")
+  public LeadResponse assign(@PathVariable Long id, @RequestBody AssignRequest body) {
+    entitlementGuard.requireCrmAccess();
+    return assignmentService.assign(id, body == null ? new AssignRequest("ROUND_ROBIN", null, null) : body);
+  }
+
+  @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ImportResult importLeads(
+      @RequestParam("file") MultipartFile file,
+      @RequestParam(value = "assignRoundRobin", defaultValue = "false") boolean assignRoundRobin,
+      @RequestParam(value = "teamId", required = false) String teamId) {
+    return importService.importFile(file, assignRoundRobin, teamId);
   }
 }

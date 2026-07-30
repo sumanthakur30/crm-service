@@ -16,6 +16,19 @@ Generic, business-agnostic CRM bounded context for SugamFlow.
 | `GET /api/v1/crm/pipelines` | List pipelines |
 | `GET /api/v1/crm/pipelines/{id}/stages` | List stages |
 | `POST/GET/PUT/PATCH/DELETE /api/v1/crm/leads` | Lead CRUD |
+| `POST /api/v1/crm/leads/{id}/assign` | MANUAL or ROUND_ROBIN assign |
+| `POST /api/v1/crm/leads/import` | CSV / XLSX multipart import |
+| `POST/GET/DELETE /api/v1/crm/assignment/members` | Team members for round-robin |
+
+### CSV / Excel columns
+
+`title` (or `name`) required. Optional: `display_name`, `company_name`, `email`, `phone`, `source_code`, `priority`, `score`, `owner_user_id`, `team_id`, `amount`, `currency`. Unknown columns → `attributes` JSON.
+
+### Round-robin
+
+1. `POST /api/v1/crm/assignment/members` with `{ "userId": "u1", "displayName": "Asha" }`  
+2. `POST /api/v1/crm/leads/{id}/assign` with `{ "mode": "ROUND_ROBIN" }`  
+3. Import: `assignRoundRobin=true` query param
 
 ## Local run
 
