@@ -19,6 +19,7 @@ import com.shopmanagement.crmservice.api.CrmDealApi.QuotationResponse;
 import com.shopmanagement.crmservice.api.CrmDealApi.QuotationSendRequest;
 import com.shopmanagement.crmservice.api.CrmDealApi.QuotationUpsert;
 import com.shopmanagement.crmservice.api.CrmDealApi.QuoteLine;
+import com.shopmanagement.crmservice.config.CrmPaymentProperties;
 import com.shopmanagement.crmservice.integration.NotificationClient;
 import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmQuotationEntity;
@@ -35,16 +36,19 @@ public class QuotationService {
   private final CrmOpportunityRepository opportunityRepository;
   private final TimelineService timelineService;
   private final NotificationClient notificationClient;
+  private final CrmPaymentProperties paymentProperties;
 
   public QuotationService(
       CrmQuotationRepository quotationRepository,
       CrmOpportunityRepository opportunityRepository,
       TimelineService timelineService,
-      NotificationClient notificationClient) {
+      NotificationClient notificationClient,
+      CrmPaymentProperties paymentProperties) {
     this.quotationRepository = quotationRepository;
     this.opportunityRepository = opportunityRepository;
     this.timelineService = timelineService;
     this.notificationClient = notificationClient;
+    this.paymentProperties = paymentProperties;
   }
 
   @Transactional
@@ -239,6 +243,67 @@ public class QuotationService {
     quote.setLinesJson(lineMaps);
   }
 
+  @Transactional
+  public QuotationResponse createPaymentLink(Long id) {
+    String tenantId = TenantIds.require();
+    CrmQuotationEntity quote = require(tenantId, id);
+    String ref = "CRM-" + quote.getQuoteNumber() + "-" + quote.getId();
+    String base = paymentProperties.getLinkBaseUrl();
+    if (base.endsWith("/")) {
+      base = base.substring(0, base.length() - 1);
+    }
+    String url =
+        base
+            + "/"
+            + tenantId
+            + "/"
+            + quote.getQuoteNumber()
+            + "?amount="
+            + quote.getTotalAmount()
+            + "&ref="
+            + ref;
+    quote.setPaymentLinkUrl(url);
+    quote.setPaymentStatus("LINK_CREATED");
+    quote.setPaymentProvider(paymentProperties.getProvider());
+    quote.setPaymentRef(ref);
+    quote.setPaymentAmount(quote.getTotalAmount());
+    Map<String, Object> share = new LinkedHashMap<>(buildSharePayload(quote));
+    share.put("paymentLink", url);
+    share.put("paymentRef", ref);
+    String wa = String.valueOf(share.getOrDefault("whatsappText", ""));
+    share.put("whatsappText", wa + "\nPay online: " + url);
+    share.put("emailBody", String.valueOf(share.getOrDefault("emailBody", "")) + "\n\nPay online: " + url);
+    quote.setSharePayloadJson(share);
+    quote.touch();
+    quote = quotationRepository.save(quote);
+    timelineService.recordEvent(
+        "OPPORTUNITY",
+        quote.getOpportunityId(),
+        "PAYMENT_LINK_CREATED",
+        "Payment link created for " + quote.getQuoteNumber(),
+        Map.of("quotationId", quote.getId(), "paymentRef", ref));
+    return toResponse(quote);
+  }
+
+  @Transactional
+  public QuotationResponse markPaid(Long id) {
+    CrmQuotationEntity quote = require(TenantIds.require(), id);
+    quote.setPaymentStatus("PAID");
+    quote.setPaidAt(java.time.Instant.now());
+    if (quote.getPaymentAmount() == null) {
+      quote.setPaymentAmount(quote.getTotalAmount());
+    }
+    quote.touch();
+    quote = quotationRepository.save(quote);
+    timelineService.recordEvent(
+        "OPPORTUNITY",
+        quote.getOpportunityId(),
+        "PAYMENT_RECEIVED",
+        "Payment marked PAID for " + quote.getQuoteNumber(),
+        Map.of("quotationId", quote.getId()));
+    return toResponse(quote);
+  }
+
   private Map<String, Object> buildSharePayload(CrmQuotationEntity quote) {
     Map<String, Object> payload = new LinkedHashMap<>();
     String text =
@@ -259,6 +324,10 @@ public class QuotationService {
             + "\nTotal: ₹"
             + quote.getTotalAmount()
             + "\n(SugamFlow CRM)";
+    if (quote.getPaymentLinkUrl() != null && !quote.getPaymentLinkUrl().isBlank()) {
+      text = text + "\nPay online: " + quote.getPaymentLinkUrl();
+      payload.put("paymentLink", quote.getPaymentLinkUrl());
+    }
     payload.put("whatsappText", text);
     payload.put("emailSubject", "Quotation " + quote.getQuoteNumber());
     payload.put("emailBody", text);
@@ -306,6 +375,12 @@ public class QuotationService {
         q.getSharePayloadJson(),
         q.getValidUntil(),
         q.getAcceptedAt(),
-        q.getCreatedAt());
+        q.getCreatedAt(),
+        q.getPaymentLinkUrl(),
+        q.getPaymentStatus(),
+        q.getPaymentProvider(),
+        q.getPaymentRef(),
+        q.getPaymentAmount(),
+        q.getPaidAt());
   }
 }

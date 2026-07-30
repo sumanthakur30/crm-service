@@ -1,5 +1,7 @@
 package com.shopmanagement.crmservice.persistence.repo;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -14,6 +16,19 @@ public interface CrmOpportunityRepository extends JpaRepository<CrmOpportunityEn
 
   Optional<CrmOpportunityEntity> findByTenantIdAndIdAndDeletedAtIsNull(String tenantId, Long id);
 
+  List<CrmOpportunityEntity> findByTenantIdAndStatusAndUpdatedAtBeforeAndDeletedAtIsNull(
+      String tenantId, String status, Instant before);
+
+  @Query(
+      """
+      SELECT o.stageId, COUNT(o), COALESCE(SUM(o.amount), 0)
+      FROM CrmOpportunityEntity o
+      WHERE o.tenantId = :tenantId AND o.deletedAt IS NULL AND o.status = 'OPEN'
+      GROUP BY o.stageId
+      """)
+  List<Object[]> openFunnelByStage(@Param("tenantId") String tenantId);
+
+  long countByTenantIdAndStatusAndDeletedAtIsNull(String tenantId, String status);
   @Query(
       """
       SELECT o FROM CrmOpportunityEntity o

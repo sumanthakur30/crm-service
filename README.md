@@ -21,8 +21,11 @@ Generic, business-agnostic CRM bounded context for SugamFlow.
 | `POST /api/v1/crm/leads/import` | CSV / XLSX multipart import |
 | `POST/GET/DELETE /api/v1/crm/assignment/members` | Team members for round-robin |
 | `POST/GET/PUT /api/v1/crm/opportunities/**` | Opportunity CRUD + stage move |
-| `POST/GET /api/v1/crm/quotations/**` | GST quotation create/list/send/accept |
+| `POST/GET /api/v1/crm/quotations/**` | GST quotation create/list/send/accept/pdf/payment-link |
 | `GET/POST /api/v1/crm/sequences/**` | Comms sequences + enroll + process-due |
+| `GET /api/v1/crm/analytics/summary` | Funnel / sources / overdue tasks |
+| `GET/POST /api/v1/crm/tasks/**` | SLA aging + open tasks |
+| `POST /api/v1/crm/leads/{id}/convert` | ERP convert adapters (shop/school/FF) |
 
 Templates: `GENERIC`, `EDUCATION`, `RETAIL`, `MEDICAL_DISTRIBUTOR` (classpath `crm-templates/*.json`).
 

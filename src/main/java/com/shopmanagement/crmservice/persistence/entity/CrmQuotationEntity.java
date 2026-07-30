@@ -94,4 +94,22 @@ public class CrmQuotationEntity extends TenantAuditableEntity {
 
   @Column(name = "accepted_at")
   private Instant acceptedAt;
+
+  @Column(name = "payment_link_url", length = 512)
+  private String paymentLinkUrl;
+
+  @Column(name = "payment_status", nullable = false, length = 32)
+  private String paymentStatus = "NONE";
+
+  @Column(name = "payment_provider", length = 32)
+  private String paymentProvider;
+
+  @Column(name = "payment_ref", length = 128)
+  private String paymentRef;
+
+  @Column(name = "payment_amount", precision = 18, scale = 2)
+  private BigDecimal paymentAmount;
+
+  @Column(name = "paid_at")
+  private Instant paidAt;
 }

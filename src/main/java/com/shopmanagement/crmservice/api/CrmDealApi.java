@@ -92,7 +92,13 @@ public final class CrmDealApi {
       Map<String, Object> sharePayload,
       LocalDate validUntil,
       Instant acceptedAt,
-      Instant createdAt) {}
+      Instant createdAt,
+      String paymentLinkUrl,
+      String paymentStatus,
+      String paymentProvider,
+      String paymentRef,
+      BigDecimal paymentAmount,
+      Instant paidAt) {}
 
   /** Optional body for POST /quotations/{id}/send — omit channel to mark SENT only. */
   public record QuotationSendRequest(

@@ -25,6 +25,7 @@ import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.AssignmentService;
 import com.shopmanagement.crmservice.service.CrmLeadService;
+import com.shopmanagement.crmservice.service.LeadConvertService;
 import com.shopmanagement.crmservice.service.LeadImportService;
 import com.shopmanagement.crmservice.service.TimelineService;
 
@@ -38,6 +39,7 @@ public class CrmLeadController {
   private final AssignmentService assignmentService;
   private final LeadImportService importService;
   private final TimelineService timelineService;
+  private final LeadConvertService leadConvertService;
   private final CrmEntitlementGuard entitlementGuard;
 
   public CrmLeadController(
@@ -45,11 +47,13 @@ public class CrmLeadController {
       AssignmentService assignmentService,
       LeadImportService importService,
       TimelineService timelineService,
+      LeadConvertService leadConvertService,
       CrmEntitlementGuard entitlementGuard) {
     this.leadService = leadService;
     this.assignmentService = assignmentService;
     this.importService = importService;
     this.timelineService = timelineService;
+    this.leadConvertService = leadConvertService;
     this.entitlementGuard = entitlementGuard;
   }
 
@@ -122,6 +126,13 @@ public class CrmLeadController {
       @PathVariable Long id, @Valid @RequestBody com.shopmanagement.crmservice.api.CrmLeadApi.NoteRequest body) {
     entitlementGuard.requireCrmAccess();
     return timelineService.addLeadNote(id, body);
+  }
+
+  @PostMapping("/{id}/convert")
+  public java.util.Map<String, Object> convert(
+      @PathVariable Long id, @RequestParam String targetSystem) {
+    entitlementGuard.requireCrmAccess();
+    return leadConvertService.convert(id, targetSystem);
   }
 
   @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -16,4 +16,6 @@ public interface CrmStageRepository extends JpaRepository<CrmStageEntity, Long> 
 
   Optional<CrmStageEntity> findFirstByTenantIdAndPipelineIdAndDeletedAtIsNullOrderBySortOrderAsc(
       String tenantId, Long pipelineId);
+
+  List<CrmStageEntity> findByTenantIdAndDeletedAtIsNullOrderBySortOrderAsc(String tenantId);
 }

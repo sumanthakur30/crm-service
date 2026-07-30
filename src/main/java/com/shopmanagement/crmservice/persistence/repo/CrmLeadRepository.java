@@ -1,5 +1,7 @@
 package com.shopmanagement.crmservice.persistence.repo;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -14,6 +16,29 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
 
   Optional<CrmLeadEntity> findByTenantIdAndIdAndDeletedAtIsNull(String tenantId, Long id);
 
+  List<CrmLeadEntity> findByTenantIdAndDeletedAtIsNull(String tenantId);
+
+  List<CrmLeadEntity> findByTenantIdAndStatusAndUpdatedAtBeforeAndDeletedAtIsNull(
+      String tenantId, String status, Instant before);
+
+  @Query(
+      """
+      SELECT COALESCE(l.sourceCode, 'UNKNOWN'), COUNT(l)
+      FROM CrmLeadEntity l
+      WHERE l.tenantId = :tenantId AND l.deletedAt IS NULL
+      GROUP BY COALESCE(l.sourceCode, 'UNKNOWN')
+      ORDER BY COUNT(l) DESC
+      """)
+  List<Object[]> countBySource(@Param("tenantId") String tenantId);
+
+  @Query(
+      """
+      SELECT l.stageId, COUNT(l)
+      FROM CrmLeadEntity l
+      WHERE l.tenantId = :tenantId AND l.deletedAt IS NULL
+      GROUP BY l.stageId
+      """)
+  List<Object[]> countByStage(@Param("tenantId") String tenantId);
   @Query(
       """
       SELECT l FROM CrmLeadEntity l
