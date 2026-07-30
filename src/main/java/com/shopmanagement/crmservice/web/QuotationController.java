@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.shopmanagement.crmservice.api.CrmDealApi.QuotationResponse;
+import com.shopmanagement.crmservice.api.CrmDealApi.QuotationSendRequest;
 import com.shopmanagement.crmservice.api.CrmDealApi.QuotationUpsert;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.QuotationService;
@@ -50,9 +51,10 @@ public class QuotationController {
   }
 
   @PostMapping("/{id}/send")
-  public QuotationResponse send(@PathVariable Long id) {
+  public QuotationResponse send(
+      @PathVariable Long id, @RequestBody(required = false) @Valid QuotationSendRequest body) {
     entitlementGuard.requireCrmAccess();
-    return quotationService.markSent(id);
+    return quotationService.markSent(id, body);
   }
 
   @PostMapping("/{id}/accept")

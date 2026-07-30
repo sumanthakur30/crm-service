@@ -93,4 +93,9 @@ public final class CrmDealApi {
       LocalDate validUntil,
       Instant acceptedAt,
       Instant createdAt) {}
+
+  /** Optional body for POST /quotations/{id}/send — omit channel to mark SENT only. */
+  public record QuotationSendRequest(
+      @Size(max = 16) String channel,
+      @Size(max = 256) String recipient) {}
 }

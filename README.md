@@ -22,8 +22,11 @@ Generic, business-agnostic CRM bounded context for SugamFlow.
 | `POST/GET/DELETE /api/v1/crm/assignment/members` | Team members for round-robin |
 | `POST/GET/PUT /api/v1/crm/opportunities/**` | Opportunity CRUD + stage move |
 | `POST/GET /api/v1/crm/quotations/**` | GST quotation create/list/send/accept |
+| `GET/POST /api/v1/crm/sequences/**` | Comms sequences + enroll + process-due |
 
 Templates: `GENERIC`, `EDUCATION`, `RETAIL`, `MEDICAL_DISTRIBUTOR` (classpath `crm-templates/*.json`).
+
+Quote send: `POST /quotations/{id}/send` with `{ "channel":"WHATSAPP","recipient":"91…" }` queues via notification-service when `crm.notification.enabled=true` (`CRM_NOTIFICATION_ENABLED`).
 
 ### CSV / Excel columns
 

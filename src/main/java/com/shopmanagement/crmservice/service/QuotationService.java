@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,8 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.api.CrmDealApi.QuotationResponse;
+import com.shopmanagement.crmservice.api.CrmDealApi.QuotationSendRequest;
 import com.shopmanagement.crmservice.api.CrmDealApi.QuotationUpsert;
 import com.shopmanagement.crmservice.api.CrmDealApi.QuoteLine;
+import com.shopmanagement.crmservice.integration.NotificationClient;
 import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmQuotationEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmOpportunityRepository;
@@ -26,17 +29,22 @@ import com.shopmanagement.crmservice.support.TenantIds;
 @Service
 public class QuotationService {
 
+  private static final Set<String> SEND_CHANNELS = Set.of("EMAIL", "WHATSAPP", "SMS");
+
   private final CrmQuotationRepository quotationRepository;
   private final CrmOpportunityRepository opportunityRepository;
   private final TimelineService timelineService;
+  private final NotificationClient notificationClient;
 
   public QuotationService(
       CrmQuotationRepository quotationRepository,
       CrmOpportunityRepository opportunityRepository,
-      TimelineService timelineService) {
+      TimelineService timelineService,
+      NotificationClient notificationClient) {
     this.quotationRepository = quotationRepository;
     this.opportunityRepository = opportunityRepository;
     this.timelineService = timelineService;
+    this.notificationClient = notificationClient;
   }
 
   @Transactional
@@ -69,18 +77,64 @@ public class QuotationService {
   }
 
   @Transactional
-  public QuotationResponse markSent(Long id) {
-    CrmQuotationEntity quote = require(TenantIds.require(), id);
+  public QuotationResponse markSent(Long id, QuotationSendRequest request) {
+    String tenantId = TenantIds.require();
+    CrmQuotationEntity quote = require(tenantId, id);
+    Map<String, Object> share = new LinkedHashMap<>(buildSharePayload(quote));
+
+    String channel =
+        request != null && request.channel() != null && !request.channel().isBlank()
+            ? request.channel().trim().toUpperCase(Locale.ROOT)
+            : null;
+    String recipient =
+        request != null && request.recipient() != null && !request.recipient().isBlank()
+            ? request.recipient().trim()
+            : null;
+
+    if (channel != null) {
+      if (!SEND_CHANNELS.contains(channel)) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "channel must be EMAIL, WHATSAPP, or SMS");
+      }
+      if (recipient == null) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "recipient is required when channel is set");
+      }
+      String subject = String.valueOf(share.getOrDefault("emailSubject", "Quotation " + quote.getQuoteNumber()));
+      String body =
+          "EMAIL".equals(channel)
+              ? String.valueOf(share.getOrDefault("emailBody", share.get("whatsappText")))
+              : String.valueOf(share.getOrDefault("whatsappText", ""));
+      Map<String, Object> delivery =
+          notificationClient.queue(
+              tenantId,
+              channel,
+              recipient,
+              subject,
+              body,
+              "crm-quote-" + quote.getId() + "-" + quote.getVersionNo() + "-" + channel);
+      share.put("lastDelivery", delivery);
+      share.put("note", "Queued via notification-service (or skipped/fail-open — see lastDelivery)");
+    } else {
+      share.put("note", "Marked SENT without outbound channel — pass channel+recipient to dispatch");
+    }
+
     quote.setStatus("SENT");
-    quote.setSharePayloadJson(buildSharePayload(quote));
+    quote.setSharePayloadJson(share);
     quote.touch();
     quote = quotationRepository.save(quote);
     timelineService.recordEvent(
         "OPPORTUNITY",
         quote.getOpportunityId(),
         "QUOTE_SENT",
-        "Quote " + quote.getQuoteNumber() + " marked SENT",
-        Map.of("quotationId", quote.getId()));
+        "Quote " + quote.getQuoteNumber() + " marked SENT"
+            + (channel != null ? " via " + channel : ""),
+        Map.of(
+            "quotationId",
+            quote.getId(),
+            "channel",
+            channel == null ? "" : channel,
+            "recipient",
+            recipient == null ? "" : recipient));
     return toResponse(quote);
   }
 
@@ -208,8 +262,10 @@ public class QuotationService {
     payload.put("whatsappText", text);
     payload.put("emailSubject", "Quotation " + quote.getQuoteNumber());
     payload.put("emailBody", text);
-    payload.put("channelHints", List.of("WHATSAPP", "EMAIL"));
-    payload.put("note", "Phase 2: share payload ready — wire notification-service in next slice");
+    payload.put("channelHints", List.of("WHATSAPP", "EMAIL", "SMS"));
+    payload.put(
+        "note",
+        "Pass channel+recipient on POST /quotations/{id}/send to queue via notification-service");
     return payload;
   }
 
