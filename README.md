@@ -32,15 +32,23 @@ Generic, business-agnostic CRM bounded context for SugamFlow.
 
 ## Local run
 
-```bash
-# Create DB
-createdb crmdb   # user/pass crmdb/crmdb by default
+```powershell
+# One-time: create role + database (postgres superuser password required)
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -U postgres -h localhost -f scripts\create-crmdb.sql
 
 cd D:\sugamFlow\crm-service
-mvn spring-boot:run -Dspring-boot.run.profiles=local
+mvn spring-boot:run "-Dspring-boot.run.profiles=local"
 ```
 
+Defaults: `jdbc:postgresql://localhost:5432/crmdb` · user/pass **`crmdb`/`crmdb`**  
+Override with `CRM_DB_URL` / `CRM_DB_USERNAME` / `CRM_DB_PASSWORD`.
+
 Port: **8095** · Eureka name: `crm-service`
+
+Local profile **disables Eureka** by default (avoids `localhost:8761` noise).  
+crm-ui proxies to `:8095`. Gateway: set `GATEWAY_CRM_URI=http://localhost:8095` (or `host.docker.internal:8095`).
+
+To register with discovery: `EUREKA_CLIENT_ENABLED=true` and start `discovery-service` on `:8761`.
 
 Headers required (except `/status` and actuator):
 
