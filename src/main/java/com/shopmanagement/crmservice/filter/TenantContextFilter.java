@@ -102,7 +102,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
         || uri.startsWith("/v3/api-docs")
         || uri.startsWith("/webjars")
         || uri.equals("/api/v1/crm/status")
-        || uri.startsWith("/api/v1/crm/public/");
+        || uri.startsWith("/api/v1/crm/public/")
+        || uri.equals("/api/v1/crm/sso/callback")
+        || uri.startsWith("/api/v1/crm/public/sso/");
   }
 
   /** Bind tenant for public capture after resolving campaign. */
