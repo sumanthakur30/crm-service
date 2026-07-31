@@ -14,6 +14,11 @@ public class CrmOrderProperties {
   private String baseUrl = "http://localhost:8083";
   /** Numeric shop org for X-Shop-Id / X-Tenant-Id when CRM tenant is non-numeric. */
   private String shopId = "";
+  /**
+   * Numeric platform tenant for {@code X-Tenant-Id}. When blank, {@link #shopId} is used for both
+   * headers (legacy). Prefer setting shopId=RET-DEMO-01 and tenantId=102 for Retail.
+   */
+  private String tenantId = "";
   /** Fallback Retail customer id when lead convert externalId is missing. */
   private Long defaultCustomerId;
   /** Fallback product id for quote lines (no productId on CRM QuoteLine yet). */
@@ -51,6 +56,14 @@ public class CrmOrderProperties {
 
   public void setShopId(String shopId) {
     this.shopId = shopId;
+  }
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+  public void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
   }
 
   public Long getDefaultCustomerId() {

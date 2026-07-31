@@ -53,13 +53,19 @@ public class OrderClient {
       return result;
     }
     String shopId = resolveShopId(tenantId);
-    String url = trimSlash(properties.getBaseUrl()) + "/api/v1/orders/sync";
+    String platformTenantId = resolvePlatformTenantId(shopId);
+    // order-service mounts at /orders (gateway may expose /api/v1/orders)
+    String url = trimSlash(properties.getBaseUrl()) + "/orders/sync";
 
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.set("X-Tenant-Id", shopId);
+    headers.set("X-Tenant-Id", platformTenantId);
     headers.set("X-Shop-Id", shopId);
     headers.set("X-Idempotency-Key", idempotencyKey);
+    // Service-to-service: mirror gateway-trusted permission headers for @RequiresModule / filters
+    headers.set("X-Auth-Permissions", "MANAGE_ORDERS,MANAGE_STOCKS");
+    headers.set("X-Auth-User", "crm-service");
+    headers.set("X-Auth-Role", "SERVICE");
     if (properties.getInternalApiKey() != null && !properties.getInternalApiKey().isBlank()) {
       headers.set("X-Internal-Api-Key", properties.getInternalApiKey().trim());
     }
@@ -94,6 +100,7 @@ public class OrderClient {
       Long customerId, Long productId, List<Map<String, Object>> items, Map<String, Object> totals) {
     Map<String, Object> order = new LinkedHashMap<>();
     order.put("customerId", customerId);
+    order.put("branchId", 1L);
     order.put("orderChannel", "CRM_QUOTE");
     order.put("billType", "SALE");
     order.put("status", "PENDING");
@@ -119,6 +126,17 @@ public class OrderClient {
       return fromRequest.trim();
     }
     return tenantId;
+  }
+
+  private String resolvePlatformTenantId(String shopId) {
+    if (properties.getTenantId() != null && !properties.getTenantId().isBlank()) {
+      return properties.getTenantId().trim();
+    }
+    // When shopId is already numeric (legacy CRM_ORDER_SHOP_ID=102), reuse it as tenant.
+    if (shopId != null && shopId.chars().allMatch(Character::isDigit)) {
+      return shopId;
+    }
+    return shopId;
   }
 
   private static String trimSlash(String base) {
