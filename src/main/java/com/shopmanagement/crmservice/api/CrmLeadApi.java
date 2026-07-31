@@ -95,7 +95,11 @@ public final class CrmLeadApi {
       Long id, Long pipelineId, String code, String name, int sortOrder, int probability, boolean won, boolean lost) {}
 
   public record StatusResponse(
-      String service, String phase, boolean entitlementCheckEnabled, boolean convertEnabled) {}
+      String service,
+      String phase,
+      boolean entitlementCheckEnabled,
+      boolean convertEnabled,
+      boolean ctiEnabled) {}
 
   public record AssignRequest(String mode, String ownerUserId, String teamId) {}
 

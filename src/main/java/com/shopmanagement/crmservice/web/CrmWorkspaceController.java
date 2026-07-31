@@ -15,6 +15,7 @@ import com.shopmanagement.crmservice.api.CrmLeadApi.StatusResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.WorkspaceBootstrapRequest;
 import com.shopmanagement.crmservice.api.CrmLeadApi.WorkspaceResponse;
 import com.shopmanagement.crmservice.config.CrmConvertProperties;
+import com.shopmanagement.crmservice.config.CrmCtiProperties;
 import com.shopmanagement.crmservice.config.CrmProperties;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.WorkspaceBootstrapService;
@@ -27,22 +28,29 @@ public class CrmWorkspaceController {
   private final CrmEntitlementGuard entitlementGuard;
   private final CrmProperties crmProperties;
   private final CrmConvertProperties convertProperties;
+  private final CrmCtiProperties ctiProperties;
 
   public CrmWorkspaceController(
       WorkspaceBootstrapService workspaceBootstrapService,
       CrmEntitlementGuard entitlementGuard,
       CrmProperties crmProperties,
-      CrmConvertProperties convertProperties) {
+      CrmConvertProperties convertProperties,
+      CrmCtiProperties ctiProperties) {
     this.workspaceBootstrapService = workspaceBootstrapService;
     this.entitlementGuard = entitlementGuard;
     this.crmProperties = crmProperties;
     this.convertProperties = convertProperties;
+    this.ctiProperties = ctiProperties;
   }
 
   @GetMapping("/status")
   public StatusResponse status() {
     return new StatusResponse(
-        "crm-service", "5-pilot", crmProperties.isEnabled(), convertProperties.isEnabled());
+        "crm-service",
+        "5-pilot",
+        crmProperties.isEnabled(),
+        convertProperties.isEnabled(),
+        ctiProperties.isEnabled());
   }
 
   @PostMapping("/workspaces/bootstrap")
