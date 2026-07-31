@@ -60,6 +60,9 @@ public class OrderClient {
     headers.set("X-Tenant-Id", shopId);
     headers.set("X-Shop-Id", shopId);
     headers.set("X-Idempotency-Key", idempotencyKey);
+    if (properties.getInternalApiKey() != null && !properties.getInternalApiKey().isBlank()) {
+      headers.set("X-Internal-Api-Key", properties.getInternalApiKey().trim());
+    }
 
     try {
       ResponseEntity<Map<String, Object>> response =

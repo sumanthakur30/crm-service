@@ -18,6 +18,8 @@ public class CrmOrderProperties {
   private Long defaultCustomerId;
   /** Fallback product id for quote lines (no productId on CRM QuoteLine yet). */
   private Long defaultProductId;
+  /** Optional service-to-service key forwarded as {@code X-Internal-Api-Key}. */
+  private String internalApiKey = "";
 
   public boolean isEnabled() {
     return enabled;
@@ -65,5 +67,13 @@ public class CrmOrderProperties {
 
   public void setDefaultProductId(Long defaultProductId) {
     this.defaultProductId = defaultProductId;
+  }
+
+  public String getInternalApiKey() {
+    return internalApiKey;
+  }
+
+  public void setInternalApiKey(String internalApiKey) {
+    this.internalApiKey = internalApiKey;
   }
 }
