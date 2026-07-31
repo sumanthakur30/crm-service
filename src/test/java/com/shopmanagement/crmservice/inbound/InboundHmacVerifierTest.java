@@ -25,6 +25,43 @@ class InboundHmacVerifierTest {
     String sig = InboundHmacVerifier.signHex(body, secret);
     assertTrue(InboundHmacVerifier.matches(body, secret, sig));
     assertTrue(InboundHmacVerifier.matches(body, secret, "sha256=" + sig));
+    assertTrue(InboundHmacVerifier.matches(body, secret, "SHA256=" + sig));
+  }
+
+  @Test
+  void guardAcceptsMetaHubSignature256Header() throws Exception {
+    CrmInboundProperties props = new CrmInboundProperties();
+    props.setSigningEnabled(true);
+    props.setHmacSecret("test-secret");
+    props.setSignatureHeader("X-Crm-Signature");
+    ObjectMapper mapper = new ObjectMapper();
+    InboundSignatureGuard guard = new InboundSignatureGuard(props, mapper);
+
+    Map<String, Object> payload = Map.of("name", "Ada");
+    byte[] canonical = mapper.writeValueAsBytes(payload);
+    String sig = InboundHmacVerifier.signHex(canonical, "test-secret");
+
+    MockHttpServletRequest req = new MockHttpServletRequest();
+    req.addHeader("X-Hub-Signature-256", "sha256=" + sig);
+    guard.verifyIfRequired(req, payload);
+  }
+
+  @Test
+  void guardAcceptsRawHexCrmSignatureHeader() throws Exception {
+    CrmInboundProperties props = new CrmInboundProperties();
+    props.setSigningEnabled(true);
+    props.setHmacSecret("test-secret");
+    props.setSignatureHeader("X-Crm-Signature");
+    ObjectMapper mapper = new ObjectMapper();
+    InboundSignatureGuard guard = new InboundSignatureGuard(props, mapper);
+
+    Map<String, Object> payload = Map.of("name", "Ada");
+    byte[] canonical = mapper.writeValueAsBytes(payload);
+    String sig = InboundHmacVerifier.signHex(canonical, "test-secret");
+
+    MockHttpServletRequest req = new MockHttpServletRequest();
+    req.addHeader("X-Crm-Signature", sig);
+    guard.verifyIfRequired(req, payload);
   }
 
   @Test

@@ -100,7 +100,11 @@ public final class CrmLeadApi {
       boolean entitlementCheckEnabled,
       boolean convertEnabled,
       boolean ctiEnabled,
-      boolean inboundSigningEnabled) {}
+      boolean inboundSigningEnabled,
+      /** Wire formats: Meta {@code X-Hub-Signature-256: sha256=<hex>} and raw hex {@code X-Crm-Signature}. */
+      String inboundSignatureFormats,
+      String ctiProvider,
+      String aiProvider) {}
 
   public record AssignRequest(String mode, String ownerUserId, String teamId) {}
 

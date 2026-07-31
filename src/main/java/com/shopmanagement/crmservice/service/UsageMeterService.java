@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.shopmanagement.crmservice.config.CrmProperties;
 import com.shopmanagement.crmservice.entitlement.SubscriptionEntitlementClient;
+import com.shopmanagement.crmservice.meter.ApiCallCounter;
 import com.shopmanagement.crmservice.meter.CrmMeterExceededException;
 import com.shopmanagement.crmservice.persistence.entity.CrmUsageCounterEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmTeamMemberRepository;
@@ -30,26 +31,25 @@ public class UsageMeterService {
   private final CrmTeamMemberRepository teamMemberRepository;
   private final SubscriptionEntitlementClient entitlementClient;
   private final CrmProperties entitlementProperties;
+  private final ApiCallCounter apiCallCounter;
 
   public UsageMeterService(
       CrmUsageCounterRepository counterRepository,
       CrmTeamMemberRepository teamMemberRepository,
       SubscriptionEntitlementClient entitlementClient,
-      CrmProperties entitlementProperties) {
+      CrmProperties entitlementProperties,
+      ApiCallCounter apiCallCounter) {
     this.counterRepository = counterRepository;
     this.teamMemberRepository = teamMemberRepository;
     this.entitlementClient = entitlementClient;
     this.entitlementProperties = entitlementProperties;
+    this.apiCallCounter = apiCallCounter;
   }
 
   @Transactional
   public long incrementApiCall(String tenantId) {
     String period = currentMonthPeriod();
-    CrmUsageCounterEntity row = loadOrCreate(tenantId, METER_API, period);
-    long next = row.getUsedCount() + 1;
-    row.setUsedCount(next);
-    row.setUpdatedAt(Instant.now());
-    counterRepository.save(row);
+    long next = apiCallCounter.increment(tenantId, period);
 
     if (entitlementProperties.isEnabled()) {
       Long limit = safeLimit(tenantId, LIMIT_API);
@@ -66,7 +66,7 @@ public class UsageMeterService {
   public Map<String, Object> snapshot() {
     String tenantId = TenantIds.require();
     String period = currentMonthPeriod();
-    long apiUsed = used(tenantId, METER_API, period);
+    long apiUsed = apiCallCounter.get(tenantId, period);
     long seatsUsed = used(tenantId, METER_SEATS, PERIOD_ALL);
     if (seatsUsed == 0) {
       seatsUsed = teamMemberRepository.countByTenantIdAndActiveTrueAndDeletedAtIsNull(tenantId);
@@ -82,6 +82,7 @@ public class UsageMeterService {
     api.put("used", apiUsed);
     api.put("limit", apiLimit);
     api.put("period", period);
+    api.put("backend", apiCallCounter.getClass().getSimpleName());
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("seats", seats);

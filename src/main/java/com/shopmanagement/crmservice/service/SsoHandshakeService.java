@@ -59,8 +59,16 @@ public class SsoHandshakeService {
 
     String redirectUri = trimSlash(properties.getPublicBaseUrl()) + ensureLeadingSlash(properties.getRedirectPath());
     String clientId = properties.getClientId();
+    String authorizeBase = properties.getAuthorizeBaseUrl();
+    if (authorizeBase == null || authorizeBase.isBlank()) {
+      authorizeBase = "https://sso.example/authorize";
+    }
+    authorizeBase = authorizeBase.trim();
+    String sep = authorizeBase.contains("?") ? "&" : "?";
     String authorizeUrl =
-        "https://sso.example/authorize?client_id="
+        authorizeBase
+            + sep
+            + "client_id="
             + enc(clientId)
             + "&state="
             + enc(state)
@@ -105,6 +113,7 @@ public class SsoHandshakeService {
     if ("STUB".equals(provider)) {
       return clientOk ? "READY" : "MISCONFIGURED";
     }
+    // OIDC/SAML: READY when enabled + metadata URL + clientId
     return metaConfigured && clientOk ? "READY" : "MISCONFIGURED";
   }
 

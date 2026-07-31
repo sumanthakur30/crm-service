@@ -19,6 +19,12 @@ public class CrmSsoProperties {
   /** Base URL used to build redirect_uri (e.g. http://localhost:8095). */
   private String publicBaseUrl = "http://localhost:8095";
 
+  /**
+   * Authorize endpoint base (e.g. https://login.example.com/oauth/authorize). When blank, STUB uses
+   * {@code https://sso.example/authorize}.
+   */
+  private String authorizeBaseUrl = "";
+
   public boolean isEnabled() {
     return enabled;
   }
@@ -65,5 +71,13 @@ public class CrmSsoProperties {
 
   public void setPublicBaseUrl(String publicBaseUrl) {
     this.publicBaseUrl = publicBaseUrl;
+  }
+
+  public String getAuthorizeBaseUrl() {
+    return authorizeBaseUrl;
+  }
+
+  public void setAuthorizeBaseUrl(String authorizeBaseUrl) {
+    this.authorizeBaseUrl = authorizeBaseUrl;
   }
 }

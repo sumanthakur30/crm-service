@@ -38,6 +38,21 @@ class SsoHandshakeServiceTest {
   }
 
   @Test
+  void authorizeUsesConfiguredBaseUrl() {
+    properties.setAuthorizeBaseUrl("https://idp.example/oauth/authorize");
+    Map<String, Object> auth = service.authorize();
+    assertTrue(String.valueOf(auth.get("authorizeUrl")).startsWith("https://idp.example/oauth/authorize?"));
+  }
+
+  @Test
+  void oidcReadyWhenMetadataAndClientSet() {
+    properties.setProvider("OIDC");
+    properties.setMetadataUrl("https://idp.example/.well-known/openid-configuration");
+    Map<String, Object> s = service.status();
+    assertEquals("READY", s.get("handshake"));
+  }
+
+  @Test
   void authorizeReturnsUrlAndCallbackValidatesState() {
     Map<String, Object> auth = service.authorize();
     String state = String.valueOf(auth.get("state"));

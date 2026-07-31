@@ -19,6 +19,7 @@ import com.shopmanagement.crmservice.config.CrmProperties;
 import com.shopmanagement.crmservice.entitlement.SubscriptionEntitlementClient;
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.meter.CrmMeterExceededException;
+import com.shopmanagement.crmservice.meter.DbApiCallCounter;
 import com.shopmanagement.crmservice.persistence.entity.CrmUsageCounterEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmTeamMemberRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmUsageCounterRepository;
@@ -38,9 +39,10 @@ class UsageMeterServiceTest {
     properties = new CrmProperties();
     properties.setEnabled(true);
     properties.setFailOpen(true);
+    DbApiCallCounter apiCounter = new DbApiCallCounter(counterRepository);
     service =
         new UsageMeterService(
-            counterRepository, teamMemberRepository, entitlementClient, properties);
+            counterRepository, teamMemberRepository, entitlementClient, properties, apiCounter);
     TenantContextFilter.bindTenantForTests("demo-crm");
   }
 

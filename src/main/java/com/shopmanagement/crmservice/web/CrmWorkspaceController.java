@@ -14,6 +14,7 @@ import com.shopmanagement.crmservice.api.CrmLeadApi.StageResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.StatusResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.WorkspaceBootstrapRequest;
 import com.shopmanagement.crmservice.api.CrmLeadApi.WorkspaceResponse;
+import com.shopmanagement.crmservice.config.CrmAiProperties;
 import com.shopmanagement.crmservice.config.CrmConvertProperties;
 import com.shopmanagement.crmservice.config.CrmCtiProperties;
 import com.shopmanagement.crmservice.config.CrmInboundProperties;
@@ -25,12 +26,16 @@ import com.shopmanagement.crmservice.service.WorkspaceBootstrapService;
 @RequestMapping("/api/v1/crm")
 public class CrmWorkspaceController {
 
+  public static final String INBOUND_SIGNATURE_FORMATS =
+      "X-Hub-Signature-256: sha256=<hex> | X-Crm-Signature: <raw-hex>";
+
   private final WorkspaceBootstrapService workspaceBootstrapService;
   private final CrmEntitlementGuard entitlementGuard;
   private final CrmProperties crmProperties;
   private final CrmConvertProperties convertProperties;
   private final CrmCtiProperties ctiProperties;
   private final CrmInboundProperties inboundProperties;
+  private final CrmAiProperties aiProperties;
 
   public CrmWorkspaceController(
       WorkspaceBootstrapService workspaceBootstrapService,
@@ -38,13 +43,15 @@ public class CrmWorkspaceController {
       CrmProperties crmProperties,
       CrmConvertProperties convertProperties,
       CrmCtiProperties ctiProperties,
-      CrmInboundProperties inboundProperties) {
+      CrmInboundProperties inboundProperties,
+      CrmAiProperties aiProperties) {
     this.workspaceBootstrapService = workspaceBootstrapService;
     this.entitlementGuard = entitlementGuard;
     this.crmProperties = crmProperties;
     this.convertProperties = convertProperties;
     this.ctiProperties = ctiProperties;
     this.inboundProperties = inboundProperties;
+    this.aiProperties = aiProperties;
   }
 
   @GetMapping("/status")
@@ -55,7 +62,10 @@ public class CrmWorkspaceController {
         crmProperties.isEnabled(),
         convertProperties.isEnabled(),
         ctiProperties.isEnabled(),
-        inboundProperties.isSigningEnabled());
+        inboundProperties.isSigningEnabled(),
+        INBOUND_SIGNATURE_FORMATS,
+        ctiProperties.getProvider() == null ? "STUB" : ctiProperties.getProvider(),
+        aiProperties.getProvider() == null ? "HEURISTIC" : aiProperties.getProvider());
   }
 
   @PostMapping("/workspaces/bootstrap")
