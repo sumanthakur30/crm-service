@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementException;
+import com.shopmanagement.crmservice.inbound.InboundSignatureException;
 import com.shopmanagement.crmservice.integration.NotificationDispatchException;
 import com.shopmanagement.crmservice.integration.OrderDispatchException;
 
@@ -20,6 +21,12 @@ public class ApiExceptionHandler {
   public ResponseEntity<Map<String, Object>> entitlement(CrmEntitlementException ex) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN)
         .body(Map.of("message", ex.getMessage(), "code", "CRM_ENTITLEMENT_DENIED"));
+  }
+
+  @ExceptionHandler(InboundSignatureException.class)
+  public ResponseEntity<Map<String, Object>> inboundSignature(InboundSignatureException ex) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .body(Map.of("message", ex.getMessage(), "code", "CRM_INBOUND_SIGNATURE_INVALID"));
   }
 
   @ExceptionHandler(NotificationDispatchException.class)

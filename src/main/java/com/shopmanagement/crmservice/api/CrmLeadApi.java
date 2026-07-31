@@ -99,7 +99,8 @@ public final class CrmLeadApi {
       String phase,
       boolean entitlementCheckEnabled,
       boolean convertEnabled,
-      boolean ctiEnabled) {}
+      boolean ctiEnabled,
+      boolean inboundSigningEnabled) {}
 
   public record AssignRequest(String mode, String ownerUserId, String teamId) {}
 
