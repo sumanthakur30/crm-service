@@ -59,6 +59,12 @@ public class CrmEntitlementGuard {
     requireSubFlag(properties.getApiFlag(), "assign crm-professional or higher for CRM API / ingest");
   }
 
+  /** Cases APIs — FEATURE_CRM + FEATURE_CRM_CASES (enterprise). */
+  public void requireCasesAccess() {
+    requireCrmAccess();
+    requireSubFlag(properties.getCasesFlag(), "assign crm-enterprise for Cases / CSAT");
+  }
+
   /** Channel gate for quote send / sequence dispatch (WHATSAPP / SMS / EMAIL). */
   public void requireChannelAccess(String channel) {
     if (channel == null || channel.isBlank()) {
@@ -98,29 +104,23 @@ public class CrmEntitlementGuard {
     putFeature(features, properties.getApprovalFlag(), tenantId, checksOn);
     putFeature(features, properties.getAutomationFlag(), tenantId, checksOn);
     putFeature(features, properties.getApiFlag(), tenantId, checksOn);
+    putFeature(features, properties.getCasesFlag(), tenantId, checksOn);
+
+    Map<String, Boolean> modules = new LinkedHashMap<>();
+    modules.put("leads", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("quotes", Boolean.TRUE.equals(features.get(properties.getQuoteFlag())));
+    modules.put("campaigns", Boolean.TRUE.equals(features.get(properties.getCampaignFlag())));
+    modules.put("ai", Boolean.TRUE.equals(features.get(properties.getAiFlag())));
+    modules.put("sequences", Boolean.TRUE.equals(features.get(properties.getSequencesFlag())));
+    modules.put("approvals", Boolean.TRUE.equals(features.get(properties.getApprovalFlag())));
+    modules.put("automation", Boolean.TRUE.equals(features.get(properties.getAutomationFlag())));
+    modules.put("ops", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("cases", Boolean.TRUE.equals(features.get(properties.getCasesFlag())));
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("checksEnabled", checksOn);
     out.put("features", features);
-    out.put(
-        "modules",
-        Map.of(
-            "leads",
-            Boolean.TRUE.equals(features.get(properties.getFlag())),
-            "quotes",
-            Boolean.TRUE.equals(features.get(properties.getQuoteFlag())),
-            "campaigns",
-            Boolean.TRUE.equals(features.get(properties.getCampaignFlag())),
-            "ai",
-            Boolean.TRUE.equals(features.get(properties.getAiFlag())),
-            "sequences",
-            Boolean.TRUE.equals(features.get(properties.getSequencesFlag())),
-            "approvals",
-            Boolean.TRUE.equals(features.get(properties.getApprovalFlag())),
-            "automation",
-            Boolean.TRUE.equals(features.get(properties.getAutomationFlag())),
-            "ops",
-            Boolean.TRUE.equals(features.get(properties.getFlag()))));
+    out.put("modules", modules);
     return out;
   }
 

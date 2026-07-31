@@ -31,32 +31,32 @@ public class CaseController {
 
   @GetMapping
   public List<Map<String, Object>> list(@RequestParam(required = false) String status) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireCasesAccess();
     return caseService.list(status);
   }
 
   @GetMapping("/{id}")
   public Map<String, Object> get(@PathVariable Long id) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireCasesAccess();
     return caseService.get(id);
   }
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public Map<String, Object> create(@RequestBody Map<String, Object> body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireCasesAccess();
     return caseService.create(body);
   }
 
   @PutMapping("/{id}/status")
   public Map<String, Object> updateStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireCasesAccess();
     return caseService.updateStatus(id, body);
   }
 
   @PostMapping("/{id}/csat")
   public Map<String, Object> submitCsat(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-    entitlementGuard.requireCrmAccess();
+    entitlementGuard.requireCasesAccess();
     return caseService.submitCsat(id, body);
   }
 }

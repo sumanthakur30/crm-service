@@ -68,6 +68,7 @@ class CrmEntitlementGuardTest {
     assertThat(modules.get("campaigns")).isTrue();
     assertThat(modules.get("ai")).isTrue();
     assertThat(modules.get("sequences")).isTrue();
+    assertThat(modules.get("cases")).isTrue();
   }
 
   @Test
@@ -83,6 +84,7 @@ class CrmEntitlementGuardTest {
     when(client.hasFeature("tenant-demo", "FEATURE_CRM_APPROVAL")).thenReturn(true);
     when(client.hasFeature("tenant-demo", "FEATURE_CRM_AUTOMATION")).thenReturn(true);
     when(client.hasFeature("tenant-demo", "FEATURE_CRM_API")).thenReturn(true);
+    when(client.hasFeature("tenant-demo", "FEATURE_CRM_CASES")).thenReturn(true);
 
     Map<String, Object> snap = guard.entitlementsSnapshot();
     @SuppressWarnings("unchecked")
@@ -91,5 +93,16 @@ class CrmEntitlementGuardTest {
     assertThat(modules.get("campaigns")).isFalse();
     assertThat(modules.get("ai")).isFalse();
     assertThat(modules.get("sequences")).isTrue();
+    assertThat(modules.get("cases")).isTrue();
+  }
+
+  @Test
+  void requireCasesAccess_blocksWhenFlagMissing() {
+    when(client.hasFeature("tenant-demo", "FEATURE_CRM")).thenReturn(true);
+    when(client.hasFeature("tenant-demo", "FEATURE_CRM_CASES")).thenReturn(false);
+
+    assertThatThrownBy(() -> guard.requireCasesAccess())
+        .isInstanceOf(CrmEntitlementException.class)
+        .hasMessageContaining("FEATURE_CRM_CASES");
   }
 }

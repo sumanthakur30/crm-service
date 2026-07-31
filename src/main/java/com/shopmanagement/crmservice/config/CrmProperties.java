@@ -22,6 +22,7 @@ public class CrmProperties {
   private String approvalFlag = "FEATURE_CRM_APPROVAL";
   private String automationFlag = "FEATURE_CRM_AUTOMATION";
   private String apiFlag = "FEATURE_CRM_API";
+  private String casesFlag = "FEATURE_CRM_CASES";
 
   /** If subscription-service is unreachable, allow request when true. */
   private boolean failOpen = false;
@@ -128,6 +129,14 @@ public class CrmProperties {
 
   public void setApiFlag(String apiFlag) {
     this.apiFlag = apiFlag;
+  }
+
+  public String getCasesFlag() {
+    return casesFlag;
+  }
+
+  public void setCasesFlag(String casesFlag) {
+    this.casesFlag = casesFlag;
   }
 
   public boolean isFailOpen() {
