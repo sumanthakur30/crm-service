@@ -1,0 +1,15 @@
+package com.shopmanagement.crmservice.meter;
+
+public class CrmMeterExceededException extends RuntimeException {
+
+  private final String code;
+
+  public CrmMeterExceededException(String code, String message) {
+    super(message);
+    this.code = code;
+  }
+
+  public String getCode() {
+    return code;
+  }
+}

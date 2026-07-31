@@ -13,6 +13,7 @@ import com.shopmanagement.crmservice.entitlement.CrmEntitlementException;
 import com.shopmanagement.crmservice.inbound.InboundSignatureException;
 import com.shopmanagement.crmservice.integration.NotificationDispatchException;
 import com.shopmanagement.crmservice.integration.OrderDispatchException;
+import com.shopmanagement.crmservice.meter.CrmMeterExceededException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -21,6 +22,12 @@ public class ApiExceptionHandler {
   public ResponseEntity<Map<String, Object>> entitlement(CrmEntitlementException ex) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN)
         .body(Map.of("message", ex.getMessage(), "code", "CRM_ENTITLEMENT_DENIED"));
+  }
+
+  @ExceptionHandler(CrmMeterExceededException.class)
+  public ResponseEntity<Map<String, Object>> meter(CrmMeterExceededException ex) {
+    return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+        .body(Map.of("message", ex.getMessage(), "code", ex.getCode()));
   }
 
   @ExceptionHandler(InboundSignatureException.class)

@@ -1,5 +1,7 @@
 package com.shopmanagement.crmservice.entitlement;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -70,6 +72,65 @@ public class SubscriptionEntitlementClient {
       }
       throw new CrmEntitlementException("Unable to verify CRM entitlement", ex);
     }
+  }
+
+  /**
+   * Reads plan limits from {@code GET /api/subscription/tenants/current/entitlements}. Returns empty
+   * map on fail-open; throws when entitlements enabled and fail-open is false.
+   */
+  @SuppressWarnings("unchecked")
+  public Map<String, Long> entitlementsLimits(String tenantId) {
+    String url =
+        UriComponentsBuilder.fromUriString(trimSlash(properties.getBaseUrl()))
+            .path("/api/subscription/tenants/current/entitlements")
+            .toUriString();
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.set("X-Tenant-Id", tenantId);
+    headers.set("X-Shop-Id", tenantId);
+    headers.set("X-Gateway-Verified", "true");
+
+    try {
+      ResponseEntity<Map<String, Object>> response =
+          restTemplate.exchange(
+              url,
+              HttpMethod.GET,
+              new HttpEntity<>(headers),
+              new ParameterizedTypeReference<Map<String, Object>>() {});
+      Map<String, Object> body = response.getBody();
+      if (body == null) {
+        return Collections.emptyMap();
+      }
+      Object data = body.get("data");
+      Map<String, Object> root = data instanceof Map<?, ?> m ? (Map<String, Object>) m : body;
+      Object limitsObj = root.get("limits");
+      if (!(limitsObj instanceof Map<?, ?> limitsMap)) {
+        return Collections.emptyMap();
+      }
+      Map<String, Long> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> e : limitsMap.entrySet()) {
+        if (e.getKey() == null || e.getValue() == null) {
+          continue;
+        }
+        try {
+          out.put(String.valueOf(e.getKey()), Long.valueOf(String.valueOf(e.getValue())));
+        } catch (NumberFormatException ignore) {
+          // skip non-numeric
+        }
+      }
+      return out;
+    } catch (RestClientException ex) {
+      log.warn("CRM limits fetch failed for tenant={}: {}", tenantId, ex.getMessage());
+      if (properties.isFailOpen() || !properties.isEnabled()) {
+        return Collections.emptyMap();
+      }
+      throw new CrmEntitlementException("Unable to verify CRM limits", ex);
+    }
+  }
+
+  public Long limitOrNull(String tenantId, String limitCode) {
+    Map<String, Long> limits = entitlementsLimits(tenantId);
+    return limits.get(limitCode);
   }
 
   private static String trimSlash(String base) {

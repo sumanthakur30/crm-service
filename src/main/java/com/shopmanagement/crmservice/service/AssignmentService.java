@@ -32,18 +32,21 @@ public class AssignmentService {
   private final CrmLeadRepository leadRepository;
   private final CrmLeadService leadService;
   private final TimelineService timelineService;
+  private final UsageMeterService usageMeterService;
 
   public AssignmentService(
       CrmTeamMemberRepository memberRepository,
       CrmRrCursorRepository cursorRepository,
       CrmLeadRepository leadRepository,
       CrmLeadService leadService,
-      TimelineService timelineService) {
+      TimelineService timelineService,
+      UsageMeterService usageMeterService) {
     this.memberRepository = memberRepository;
     this.cursorRepository = cursorRepository;
     this.leadRepository = leadRepository;
     this.leadService = leadService;
     this.timelineService = timelineService;
+    this.usageMeterService = usageMeterService;
   }
 
   @Transactional
@@ -58,6 +61,7 @@ public class AssignmentService {
             .orElseGet(CrmTeamMemberEntity::new);
 
     if (member.getId() == null) {
+      usageMeterService.assertCanAddSeat();
       member.setTenantId(tenantId);
       member.setTeamId(teamId);
       member.setUserId(userId);

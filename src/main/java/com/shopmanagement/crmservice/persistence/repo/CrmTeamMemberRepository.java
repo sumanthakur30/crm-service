@@ -28,4 +28,6 @@ public interface CrmTeamMemberRepository extends JpaRepository<CrmTeamMemberEnti
           + "AND m.active = true AND m.deletedAt IS NULL ORDER BY m.sortOrder ASC, m.id ASC")
   List<CrmTeamMemberEntity> findActiveForUpdate(
       @Param("tenantId") String tenantId, @Param("teamId") String teamId);
+
+  long countByTenantIdAndActiveTrueAndDeletedAtIsNull(String tenantId);
 }
