@@ -1,63 +1,62 @@
-package com.shopmanagement.crmservice.web;
-
-import java.util.List;
-import java.util.Map;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
-import com.shopmanagement.crmservice.service.CaseService;
-
-@RestController
-@RequestMapping("/api/v1/crm/cases")
-public class CaseController {
-
-  private final CaseService caseService;
-  private final CrmEntitlementGuard entitlementGuard;
-
-  public CaseController(CaseService caseService, CrmEntitlementGuard entitlementGuard) {
-    this.caseService = caseService;
-    this.entitlementGuard = entitlementGuard;
-  }
-
-  @GetMapping
-  public List<Map<String, Object>> list(@RequestParam(required = false) String status) {
-    entitlementGuard.requireCrmAccess();
-    return caseService.list(status);
-  }
-
-  @GetMapping("/{id}")
-  public Map<String, Object> get(@PathVariable Long id) {
-    entitlementGuard.requireCrmAccess();
-    return caseService.get(id);
-  }
-
-  @PostMapping
-  @ResponseStatus(HttpStatus.CREATED)
-  public Map<String, Object> create(@RequestBody Map<String, Object> body) {
-    entitlementGuard.requireCrmAccess();
-    return caseService.create(body);
-  }
-
-  @PutMapping("/{id}/status")
-  public Map<String, Object> updateStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-    entitlementGuard.requireCrmAccess();
-    return caseService.updateStatus(id, body);
-  }
-
-  @PostMapping("/{id}/csat")
-  public Map<String, Object> submitCsat(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-    entitlementGuard.requireCrmAccess();
-    return caseService.submitCsat(id, body);
-  }
-}
-
+package com.shopmanagement.crmservice.web;
+
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
+import com.shopmanagement.crmservice.service.CaseService;
+
+@RestController
+@RequestMapping("/api/v1/crm/cases")
+public class CaseController {
+
+  private final CaseService caseService;
+  private final CrmEntitlementGuard entitlementGuard;
+
+  public CaseController(CaseService caseService, CrmEntitlementGuard entitlementGuard) {
+    this.caseService = caseService;
+    this.entitlementGuard = entitlementGuard;
+  }
+
+  @GetMapping
+  public List<Map<String, Object>> list(@RequestParam(required = false) String status) {
+    entitlementGuard.requireCrmAccess();
+    return caseService.list(status);
+  }
+
+  @GetMapping("/{id}")
+  public Map<String, Object> get(@PathVariable Long id) {
+    entitlementGuard.requireCrmAccess();
+    return caseService.get(id);
+  }
+
+  @PostMapping
+  @ResponseStatus(HttpStatus.CREATED)
+  public Map<String, Object> create(@RequestBody Map<String, Object> body) {
+    entitlementGuard.requireCrmAccess();
+    return caseService.create(body);
+  }
+
+  @PutMapping("/{id}/status")
+  public Map<String, Object> updateStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    entitlementGuard.requireCrmAccess();
+    return caseService.updateStatus(id, body);
+  }
+
+  @PostMapping("/{id}/csat")
+  public Map<String, Object> submitCsat(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    entitlementGuard.requireCrmAccess();
+    return caseService.submitCsat(id, body);
+  }
+}

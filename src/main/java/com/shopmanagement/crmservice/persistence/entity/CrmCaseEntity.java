@@ -53,5 +53,8 @@ public class CrmCaseEntity extends TenantAuditableEntity {
 
   @Column(name = "csat_submitted_at")
   private Instant csatSubmittedAt;
-}
 
+  /** Token for public CSAT survey link (no tenant header). */
+  @Column(name = "csat_public_token", nullable = false, length = 36, unique = true)
+  private String csatPublicToken;
+}
