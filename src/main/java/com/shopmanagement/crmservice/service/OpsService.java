@@ -3,11 +3,14 @@ package com.shopmanagement.crmservice.service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -18,20 +21,25 @@ import org.springframework.web.server.ResponseStatusException;
 import com.shopmanagement.crmservice.persistence.entity.CrmApprovalEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmCalendarEventEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmCallLogEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmForecastCommitEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmApprovalRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmCalendarEventRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmCallLogRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmForecastCommitRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmOpportunityRepository;
 import com.shopmanagement.crmservice.support.TenantIds;
 
 @Service
 public class OpsService {
 
+  private static final Pattern PERIOD_YM = Pattern.compile("^[0-9]{4}-[0-9]{2}$");
+
   private final CrmCalendarEventRepository calendarRepository;
   private final CrmCallLogRepository callLogRepository;
   private final CrmApprovalRepository approvalRepository;
   private final CrmOpportunityRepository opportunityRepository;
+  private final CrmForecastCommitRepository forecastCommitRepository;
   private final TimelineService timelineService;
   private final BehaviorScoringService scoringService;
   private final QuotationService quotationService;
@@ -41,6 +49,7 @@ public class OpsService {
       CrmCallLogRepository callLogRepository,
       CrmApprovalRepository approvalRepository,
       CrmOpportunityRepository opportunityRepository,
+      CrmForecastCommitRepository forecastCommitRepository,
       TimelineService timelineService,
       BehaviorScoringService scoringService,
       QuotationService quotationService) {
@@ -48,6 +57,7 @@ public class OpsService {
     this.callLogRepository = callLogRepository;
     this.approvalRepository = approvalRepository;
     this.opportunityRepository = opportunityRepository;
+    this.forecastCommitRepository = forecastCommitRepository;
     this.timelineService = timelineService;
     this.scoringService = scoringService;
     this.quotationService = quotationService;
@@ -181,7 +191,13 @@ public class OpsService {
 
   @Transactional(readOnly = true)
   public Map<String, Object> forecast() {
+    return forecast(null);
+  }
+
+  @Transactional(readOnly = true)
+  public Map<String, Object> forecast(String periodYm) {
     String tenantId = TenantIds.require();
+    String period = normalizePeriod(periodYm);
     List<CrmOpportunityEntity> open =
         opportunityRepository
             .search(tenantId, "OPEN", null, null, PageRequest.of(0, 500))
@@ -205,12 +221,81 @@ public class OpsService {
       row.put("expectedCloseDate", o.getExpectedCloseDate());
       rows.add(row);
     }
+
+    List<CrmForecastCommitEntity> commits =
+        forecastCommitRepository.findByTenantIdAndPeriodYmOrderByUpdatedAtDesc(tenantId, period);
+    BigDecimal commitTotal = BigDecimal.ZERO;
+    List<Map<String, Object>> commitRows = new ArrayList<>();
+    for (CrmForecastCommitEntity c : commits) {
+      commitTotal = commitTotal.add(c.getAmount() == null ? BigDecimal.ZERO : c.getAmount());
+      commitRows.add(toCommit(c));
+    }
+
+    Map<String, Object> collaborative = new LinkedHashMap<>();
+    collaborative.put("pipelineWeighted", weighted);
+    collaborative.put("commitTotal", commitTotal);
+    collaborative.put("combined", weighted.add(commitTotal));
+
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("openCount", open.size());
     out.put("pipelineAmount", pipeline);
     out.put("weightedForecast", weighted);
+    out.put("pipeline", rows);
     out.put("deals", rows);
+    out.put("periodYm", period);
+    out.put("commits", commitRows);
+    out.put("commitTotal", commitTotal);
+    out.put("collaborative", collaborative);
     return out;
+  }
+
+  @Transactional
+  public Map<String, Object> upsertForecastCommit(Map<String, Object> body) {
+    String tenantId = TenantIds.require();
+    String userId = TenantIds.currentUserOrDemo();
+    String period = normalizePeriod(str(body.get("periodYm")));
+    if (body.get("amount") == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount required");
+    }
+    BigDecimal amount = new BigDecimal(String.valueOf(body.get("amount")));
+    CrmForecastCommitEntity e =
+        forecastCommitRepository
+            .findByTenantIdAndUserIdAndPeriodYm(tenantId, userId, period)
+            .orElseGet(CrmForecastCommitEntity::new);
+    if (e.getId() == null) {
+      e.setTenantId(tenantId);
+      e.setUserId(userId);
+      e.setPeriodYm(period);
+      e.setCreatedAt(Instant.now());
+    }
+    e.setAmount(amount);
+    e.setCurrency(str(body.get("currency")) != null ? str(body.get("currency")) : "INR");
+    e.setNote(str(body.get("note")));
+    e.setUpdatedAt(Instant.now());
+    return toCommit(forecastCommitRepository.save(e));
+  }
+
+  private static String normalizePeriod(String periodYm) {
+    if (periodYm == null || periodYm.isBlank()) {
+      return YearMonth.now(ZoneOffset.UTC).toString();
+    }
+    String p = periodYm.trim();
+    if (!PERIOD_YM.matcher(p).matches()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "periodYm must be YYYY-MM");
+    }
+    return p;
+  }
+
+  private static Map<String, Object> toCommit(CrmForecastCommitEntity c) {
+    Map<String, Object> m = new LinkedHashMap<>();
+    m.put("id", c.getId());
+    m.put("userId", c.getUserId());
+    m.put("periodYm", c.getPeriodYm());
+    m.put("amount", c.getAmount());
+    m.put("currency", c.getCurrency());
+    m.put("note", c.getNote());
+    m.put("updatedAt", c.getUpdatedAt());
+    return m;
   }
 
   private static Map<String, Object> toCal(CrmCalendarEventEntity e) {

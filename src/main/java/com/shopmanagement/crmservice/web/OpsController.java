@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -72,8 +73,14 @@ public class OpsController {
   }
 
   @GetMapping("/forecast")
-  public Map<String, Object> forecast() {
+  public Map<String, Object> forecast(@RequestParam(required = false) String periodYm) {
     entitlementGuard.requireCrmAccess();
-    return opsService.forecast();
+    return opsService.forecast(periodYm);
+  }
+
+  @PutMapping("/forecast/commits")
+  public Map<String, Object> upsertForecastCommit(@RequestBody Map<String, Object> body) {
+    entitlementGuard.requireCrmAccess();
+    return opsService.upsertForecastCommit(body);
   }
 }
