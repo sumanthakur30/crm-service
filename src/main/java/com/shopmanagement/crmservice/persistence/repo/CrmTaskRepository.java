@@ -14,6 +14,12 @@ public interface CrmTaskRepository extends JpaRepository<CrmTaskEntity, Long> {
 
   List<CrmTaskEntity> findByTenantIdAndStatusAndDeletedAtIsNullOrderByDueAtAsc(String tenantId, String status);
 
+  List<CrmTaskEntity> findByTenantIdAndStatusAndDueAtBeforeAndDeletedAtIsNullOrderByDueAtAsc(
+      String tenantId, String status, Instant before);
+
+  List<CrmTaskEntity> findByTenantIdAndStatusAndDueAtGreaterThanEqualAndDueAtLessThanAndDeletedAtIsNullOrderByDueAtAsc(
+      String tenantId, String status, Instant fromInclusive, Instant toExclusive);
+
   boolean existsByTenantIdAndRelatedTypeAndRelatedIdAndSlaPolicyIdAndStatusAndDeletedAtIsNull(
       String tenantId, String relatedType, Long relatedId, Long slaPolicyId, String status);
 

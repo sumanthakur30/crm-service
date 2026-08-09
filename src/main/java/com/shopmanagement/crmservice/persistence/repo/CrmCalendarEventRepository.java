@@ -16,4 +16,8 @@ public interface CrmCalendarEventRepository extends JpaRepository<CrmCalendarEve
 
   List<CrmCalendarEventEntity> findByTenantIdAndStartsAtGreaterThanEqualAndDeletedAtIsNullOrderByStartsAtAsc(
       String tenantId, Instant from);
+
+  List<CrmCalendarEventEntity>
+      findByTenantIdAndStartsAtGreaterThanEqualAndStartsAtLessThanAndDeletedAtIsNullOrderByStartsAtAsc(
+          String tenantId, Instant fromInclusive, Instant toExclusive);
 }

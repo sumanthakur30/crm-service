@@ -108,4 +108,8 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
       @Param("scopeUserId") String scopeUserId,
       @Param("scopeTeamIds") List<String> scopeTeamIds,
       Pageable pageable);
+
+  List<CrmLeadEntity>
+      findByTenantIdAndStatusAndScoreGreaterThanEqualAndDeletedAtIsNullOrderByScoreDesc(
+          String tenantId, String status, int minScore, Pageable pageable);
 }

@@ -111,6 +111,7 @@ public class CrmEntitlementGuard {
     modules.put("deals", Boolean.TRUE.equals(features.get(properties.getFlag())));
     modules.put("accounts", Boolean.TRUE.equals(features.get(properties.getFlag())));
     modules.put("insights", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("home", Boolean.TRUE.equals(features.get(properties.getFlag())));
     modules.put("quotes", Boolean.TRUE.equals(features.get(properties.getQuoteFlag())));
     modules.put("campaigns", Boolean.TRUE.equals(features.get(properties.getCampaignFlag())));
     modules.put("ai", Boolean.TRUE.equals(features.get(properties.getAiFlag())));
