@@ -15,17 +15,24 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.AccountContactService;
+import com.shopmanagement.crmservice.service.TimelineService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/crm")
 public class AccountContactController {
 
   private final AccountContactService accountContactService;
+  private final TimelineService timelineService;
   private final CrmEntitlementGuard entitlementGuard;
 
   public AccountContactController(
-      AccountContactService accountContactService, CrmEntitlementGuard entitlementGuard) {
+      AccountContactService accountContactService,
+      TimelineService timelineService,
+      CrmEntitlementGuard entitlementGuard) {
     this.accountContactService = accountContactService;
+    this.timelineService = timelineService;
     this.entitlementGuard = entitlementGuard;
   }
 
@@ -65,5 +72,27 @@ public class AccountContactController {
   public Map<String, Object> upsertContact(@RequestBody Map<String, Object> body) {
     entitlementGuard.requireCrmAccess();
     return accountContactService.upsertContact(body);
+  }
+
+  @GetMapping("/accounts/{id}/summary")
+  public Map<String, Object> accountSummary(@PathVariable Long id) {
+    entitlementGuard.requireCrmAccess();
+    return accountContactService.accountSummary(id);
+  }
+
+  @GetMapping("/accounts/{id}/timeline")
+  public java.util.List<com.shopmanagement.crmservice.api.CrmLeadApi.TimelineItem> accountTimeline(
+      @PathVariable Long id) {
+    entitlementGuard.requireCrmAccess();
+    return timelineService.accountTimeline(id);
+  }
+
+  @PostMapping("/accounts/{id}/notes")
+  @ResponseStatus(HttpStatus.CREATED)
+  public com.shopmanagement.crmservice.api.CrmLeadApi.NoteResponse addAccountNote(
+      @PathVariable Long id,
+      @Valid @RequestBody com.shopmanagement.crmservice.api.CrmLeadApi.NoteRequest body) {
+    entitlementGuard.requireCrmAccess();
+    return timelineService.addAccountNote(id, body);
   }
 }

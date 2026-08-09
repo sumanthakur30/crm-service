@@ -2,6 +2,7 @@ package com.shopmanagement.crmservice.service;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +26,8 @@ import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmOpportunityRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmPipelineRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageRepository;
+import com.shopmanagement.crmservice.security.CrmAccessScope;
+import com.shopmanagement.crmservice.security.CrmRecordScopeService;
 import com.shopmanagement.crmservice.support.TenantIds;
 
 @Service
@@ -41,6 +44,7 @@ public class OpportunityService {
   private final WorkspaceBootstrapService workspaceBootstrapService;
   private final TimelineService timelineService;
   private final StageAutomationService stageAutomationService;
+  private final CrmRecordScopeService recordScopeService;
 
   public OpportunityService(
       CrmOpportunityRepository opportunityRepository,
@@ -51,7 +55,8 @@ public class OpportunityService {
       CloseReasonService closeReasonService,
       WorkspaceBootstrapService workspaceBootstrapService,
       TimelineService timelineService,
-      StageAutomationService stageAutomationService) {
+      StageAutomationService stageAutomationService,
+      CrmRecordScopeService recordScopeService) {
     this.opportunityRepository = opportunityRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
@@ -61,6 +66,7 @@ public class OpportunityService {
     this.workspaceBootstrapService = workspaceBootstrapService;
     this.timelineService = timelineService;
     this.stageAutomationService = stageAutomationService;
+    this.recordScopeService = recordScopeService;
   }
 
   @Transactional
@@ -100,6 +106,7 @@ public class OpportunityService {
   public OpportunityResponse update(Long id, OpportunityUpsert body) {
     String tenantId = TenantIds.require();
     CrmOpportunityEntity opp = require(tenantId, id);
+    recordScopeService.assertCanAccess(opp.getOwnerUserId(), opp.getTeamId());
     CrmPipelineEntity pipeline =
         resolveOppPipeline(tenantId, body.pipelineId() != null ? body.pipelineId() : opp.getPipelineId());
     CrmStageEntity stage =
@@ -122,6 +129,7 @@ public class OpportunityService {
   public OpportunityResponse moveStage(Long id, Long stageId, OpportunityStageMove body) {
     String tenantId = TenantIds.require();
     CrmOpportunityEntity opp = require(tenantId, id);
+    recordScopeService.assertCanAccess(opp.getOwnerUserId(), opp.getTeamId());
     Long from = opp.getStageId();
     CrmStageEntity stage = resolveStage(tenantId, opp.getPipelineId(), stageId);
     opp.setStageId(stage.getId());
@@ -188,14 +196,29 @@ public class OpportunityService {
 
   @Transactional(readOnly = true)
   public OpportunityResponse get(Long id) {
-    return toResponse(require(TenantIds.require(), id));
+    CrmOpportunityEntity opp = require(TenantIds.require(), id);
+    recordScopeService.assertCanAccess(opp.getOwnerUserId(), opp.getTeamId());
+    return toResponse(opp);
   }
 
   @Transactional(readOnly = true)
   public Page<OpportunityResponse> search(String status, Long stageId, String q, Pageable pageable) {
     String tenantId = TenantIds.require();
     String st = status == null || status.isBlank() ? null : status.trim().toUpperCase(Locale.ROOT);
-    return opportunityRepository.search(tenantId, st, stageId, q, pageable).map(OpportunityService::toResponse);
+    var filter = recordScopeService.listFilter(null);
+    String scopeMode = filter.scope().name();
+    String scopeUserId = filter.scopeUserId();
+    List<String> scopeTeamIds =
+        filter.scopeTeamIds() == null || filter.scopeTeamIds().isEmpty()
+            ? List.of("__NONE__")
+            : filter.scopeTeamIds();
+    if (filter.scope() == CrmAccessScope.ORG) {
+      scopeMode = "ORG";
+      scopeUserId = null;
+    }
+    return opportunityRepository
+        .search(tenantId, st, stageId, q, scopeMode, scopeUserId, scopeTeamIds, pageable)
+        .map(OpportunityService::toResponse);
   }
 
   private CrmOpportunityEntity require(String tenantId, Long id) {

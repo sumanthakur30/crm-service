@@ -22,6 +22,9 @@ public interface CrmTeamMemberRepository extends JpaRepository<CrmTeamMemberEnti
   Optional<CrmTeamMemberEntity> findByTenantIdAndTeamIdAndUserIdAndDeletedAtIsNull(
       String tenantId, String teamId, String userId);
 
+  List<CrmTeamMemberEntity> findByTenantIdAndUserIdAndActiveTrueAndDeletedAtIsNull(
+      String tenantId, String userId);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       "SELECT m FROM CrmTeamMemberEntity m WHERE m.tenantId = :tenantId AND m.teamId = :teamId "

@@ -22,6 +22,8 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
 
   List<CrmLeadEntity> findByTenantIdAndEmailAndDeletedAtIsNull(String tenantId, String email);
 
+  List<CrmLeadEntity> findByTenantIdAndAccountIdAndDeletedAtIsNull(String tenantId, Long accountId);
+
   long countByTenantIdAndOwnerUserIdAndStatusAndDeletedAtIsNull(
       String tenantId, String ownerUserId, String status);
 
@@ -75,6 +77,18 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
         AND (:pipelineId IS NULL OR l.pipelineId = :pipelineId)
         AND (:ownerUserId IS NULL OR l.ownerUserId = :ownerUserId)
         AND (
+          :scopeMode IS NULL OR :scopeMode = 'ORG'
+          OR (
+            :scopeMode = 'OWN' AND l.ownerUserId = :scopeUserId
+          )
+          OR (
+            :scopeMode = 'TEAM' AND (
+              l.ownerUserId = :scopeUserId
+              OR (l.teamId IS NOT NULL AND l.teamId IN :scopeTeamIds)
+            )
+          )
+        )
+        AND (
           :q IS NULL OR :q = '' OR
           LOWER(l.title) LIKE LOWER(CONCAT('%', :q, '%')) OR
           LOWER(COALESCE(l.displayName, '')) LIKE LOWER(CONCAT('%', :q, '%')) OR
@@ -90,5 +104,8 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
       @Param("pipelineId") Long pipelineId,
       @Param("ownerUserId") String ownerUserId,
       @Param("q") String q,
+      @Param("scopeMode") String scopeMode,
+      @Param("scopeUserId") String scopeUserId,
+      @Param("scopeTeamIds") List<String> scopeTeamIds,
       Pageable pageable);
 }

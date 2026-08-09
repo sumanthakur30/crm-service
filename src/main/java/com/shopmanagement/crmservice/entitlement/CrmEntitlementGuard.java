@@ -108,6 +108,9 @@ public class CrmEntitlementGuard {
 
     Map<String, Boolean> modules = new LinkedHashMap<>();
     modules.put("leads", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("deals", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("accounts", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("insights", Boolean.TRUE.equals(features.get(properties.getFlag())));
     modules.put("quotes", Boolean.TRUE.equals(features.get(properties.getQuoteFlag())));
     modules.put("campaigns", Boolean.TRUE.equals(features.get(properties.getCampaignFlag())));
     modules.put("ai", Boolean.TRUE.equals(features.get(properties.getAiFlag())));
@@ -121,6 +124,11 @@ public class CrmEntitlementGuard {
     out.put("checksEnabled", checksOn);
     out.put("features", features);
     out.put("modules", modules);
+    out.put(
+        "recordScope",
+        Map.of(
+            "note",
+            "OWN/TEAM/ORG via crm.security.record-scope-enabled + X-Crm-Access-Scope / X-Auth-Role"));
     return out;
   }
 

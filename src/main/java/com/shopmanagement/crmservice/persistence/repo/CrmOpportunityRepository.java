@@ -16,6 +16,8 @@ public interface CrmOpportunityRepository extends JpaRepository<CrmOpportunityEn
 
   Optional<CrmOpportunityEntity> findByTenantIdAndIdAndDeletedAtIsNull(String tenantId, Long id);
 
+  List<CrmOpportunityEntity> findByTenantIdAndAccountIdAndDeletedAtIsNull(String tenantId, Long accountId);
+
   List<CrmOpportunityEntity> findByTenantIdAndStatusAndUpdatedAtBeforeAndDeletedAtIsNull(
       String tenantId, String status, Instant before);
 
@@ -36,6 +38,18 @@ public interface CrmOpportunityRepository extends JpaRepository<CrmOpportunityEn
         AND (:status IS NULL OR o.status = :status)
         AND (:stageId IS NULL OR o.stageId = :stageId)
         AND (
+          :scopeMode IS NULL OR :scopeMode = 'ORG'
+          OR (
+            :scopeMode = 'OWN' AND o.ownerUserId = :scopeUserId
+          )
+          OR (
+            :scopeMode = 'TEAM' AND (
+              o.ownerUserId = :scopeUserId
+              OR (o.teamId IS NOT NULL AND o.teamId IN :scopeTeamIds)
+            )
+          )
+        )
+        AND (
           :q IS NULL OR :q = '' OR
           LOWER(o.name) LIKE LOWER(CONCAT('%', :q, '%'))
         )
@@ -45,5 +59,8 @@ public interface CrmOpportunityRepository extends JpaRepository<CrmOpportunityEn
       @Param("status") String status,
       @Param("stageId") Long stageId,
       @Param("q") String q,
+      @Param("scopeMode") String scopeMode,
+      @Param("scopeUserId") String scopeUserId,
+      @Param("scopeTeamIds") List<String> scopeTeamIds,
       Pageable pageable);
 }

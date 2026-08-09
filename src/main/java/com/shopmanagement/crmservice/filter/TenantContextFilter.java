@@ -22,11 +22,15 @@ public class TenantContextFilter extends OncePerRequestFilter {
   public static final String TENANT_ID_HEADER = "X-Tenant-Id";
   public static final String SHOP_ID_HEADER = "X-Shop-Id";
   public static final String USER_ID_HEADER = "X-User-Id";
+  public static final String AUTH_ROLE_HEADER = "X-Auth-Role";
+  public static final String ACCESS_SCOPE_HEADER = "X-Crm-Access-Scope";
   public static final String REQUEST_ID_MDC_KEY = "requestId";
 
   private static final ThreadLocal<String> CURRENT_TENANT = new ThreadLocal<>();
   private static final ThreadLocal<String> CURRENT_SHOP = new ThreadLocal<>();
   private static final ThreadLocal<String> CURRENT_USER = new ThreadLocal<>();
+  private static final ThreadLocal<String> CURRENT_AUTH_ROLE = new ThreadLocal<>();
+  private static final ThreadLocal<String> CURRENT_ACCESS_SCOPE = new ThreadLocal<>();
 
   @Override
   protected void doFilterInternal(
@@ -57,6 +61,14 @@ public class TenantContextFilter extends OncePerRequestFilter {
         if (userId != null && !userId.isBlank()) {
           CURRENT_USER.set(userId.trim());
         }
+        String role = request.getHeader(AUTH_ROLE_HEADER);
+        if (role != null && !role.isBlank()) {
+          CURRENT_AUTH_ROLE.set(role.trim());
+        }
+        String scope = request.getHeader(ACCESS_SCOPE_HEADER);
+        if (scope != null && !scope.isBlank()) {
+          CURRENT_ACCESS_SCOPE.set(scope.trim());
+        }
       }
       filterChain.doFilter(request, response);
     } finally {
@@ -64,6 +76,8 @@ public class TenantContextFilter extends OncePerRequestFilter {
       CURRENT_TENANT.remove();
       CURRENT_SHOP.remove();
       CURRENT_USER.remove();
+      CURRENT_AUTH_ROLE.remove();
+      CURRENT_ACCESS_SCOPE.remove();
     }
   }
 
@@ -79,6 +93,14 @@ public class TenantContextFilter extends OncePerRequestFilter {
     return CURRENT_USER.get();
   }
 
+  public static String getCurrentAuthRole() {
+    return CURRENT_AUTH_ROLE.get();
+  }
+
+  public static String getCurrentAccessScope() {
+    return CURRENT_ACCESS_SCOPE.get();
+  }
+
   /** Test hook — do not use in production request paths. */
   public static void bindTenantForTests(String tenantId) {
     CURRENT_TENANT.set(tenantId);
@@ -90,10 +112,17 @@ public class TenantContextFilter extends OncePerRequestFilter {
   }
 
   /** Test hook — do not use in production request paths. */
+  public static void bindUserForTests(String userId) {
+    CURRENT_USER.set(userId);
+  }
+
+  /** Test hook — do not use in production request paths. */
   public static void clearTenantForTests() {
     CURRENT_TENANT.remove();
     CURRENT_SHOP.remove();
     CURRENT_USER.remove();
+    CURRENT_AUTH_ROLE.remove();
+    CURRENT_ACCESS_SCOPE.remove();
   }
 
   private static boolean skipsTenant(String uri) {

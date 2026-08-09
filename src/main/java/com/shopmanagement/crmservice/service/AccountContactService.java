@@ -11,8 +11,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.persistence.entity.CrmAccountEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmContactEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmAccountRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmContactRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmOpportunityRepository;
 import com.shopmanagement.crmservice.support.TenantIds;
 
 @Service
@@ -20,11 +24,18 @@ public class AccountContactService {
 
   private final CrmAccountRepository accountRepository;
   private final CrmContactRepository contactRepository;
+  private final CrmLeadRepository leadRepository;
+  private final CrmOpportunityRepository opportunityRepository;
 
   public AccountContactService(
-      CrmAccountRepository accountRepository, CrmContactRepository contactRepository) {
+      CrmAccountRepository accountRepository,
+      CrmContactRepository contactRepository,
+      CrmLeadRepository leadRepository,
+      CrmOpportunityRepository opportunityRepository) {
     this.accountRepository = accountRepository;
     this.contactRepository = contactRepository;
+    this.leadRepository = leadRepository;
+    this.opportunityRepository = opportunityRepository;
   }
 
   @Transactional
@@ -123,6 +134,42 @@ public class AccountContactService {
         contactRepository
             .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Contact not found")));
+  }
+
+  /** Account detail aggregate for CRM UI drawer. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> accountSummary(Long accountId) {
+    String tenantId = TenantIds.require();
+    Map<String, Object> account = getAccount(accountId);
+    List<Map<String, Object>> contacts = listContacts(accountId);
+    List<Map<String, Object>> leads = new java.util.ArrayList<>();
+    for (CrmLeadEntity lead :
+        leadRepository.findByTenantIdAndAccountIdAndDeletedAtIsNull(tenantId, accountId)) {
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("id", lead.getId());
+      row.put("title", lead.getTitle());
+      row.put("status", lead.getStatus());
+      row.put("ownerUserId", lead.getOwnerUserId());
+      row.put("phone", lead.getPhone());
+      leads.add(row);
+    }
+    List<Map<String, Object>> opportunities = new java.util.ArrayList<>();
+    for (CrmOpportunityEntity opp :
+        opportunityRepository.findByTenantIdAndAccountIdAndDeletedAtIsNull(tenantId, accountId)) {
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("id", opp.getId());
+      row.put("name", opp.getName());
+      row.put("status", opp.getStatus());
+      row.put("amount", opp.getAmount());
+      row.put("stageId", opp.getStageId());
+      opportunities.add(row);
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("account", account);
+    out.put("contacts", contacts);
+    out.put("leads", leads);
+    out.put("opportunities", opportunities);
+    return out;
   }
 
   private static Map<String, Object> toAccount(CrmAccountEntity a) {

@@ -1,6 +1,7 @@
 package com.shopmanagement.crmservice.service;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -25,6 +26,8 @@ import com.shopmanagement.crmservice.persistence.repo.CrmContactRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmPipelineRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageRepository;
+import com.shopmanagement.crmservice.security.CrmAccessScope;
+import com.shopmanagement.crmservice.security.CrmRecordScopeService;
 import com.shopmanagement.crmservice.support.TenantIds;
 
 @Service
@@ -42,6 +45,7 @@ public class CrmLeadService {
   private final WorkspaceBootstrapService workspaceBootstrapService;
   private final TimelineService timelineService;
   private final StageAutomationService stageAutomationService;
+  private final CrmRecordScopeService recordScopeService;
 
   public CrmLeadService(
       CrmLeadRepository leadRepository,
@@ -52,7 +56,8 @@ public class CrmLeadService {
       CrmContactRepository contactRepository,
       WorkspaceBootstrapService workspaceBootstrapService,
       TimelineService timelineService,
-      StageAutomationService stageAutomationService) {
+      StageAutomationService stageAutomationService,
+      CrmRecordScopeService recordScopeService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
@@ -62,6 +67,7 @@ public class CrmLeadService {
     this.workspaceBootstrapService = workspaceBootstrapService;
     this.timelineService = timelineService;
     this.stageAutomationService = stageAutomationService;
+    this.recordScopeService = recordScopeService;
   }
 
   @Transactional
@@ -90,6 +96,7 @@ public class CrmLeadService {
   public LeadResponse update(Long id, LeadUpsert body) {
     String tenantId = TenantIds.require();
     CrmLeadEntity lead = requireLead(tenantId, id);
+    recordScopeService.assertCanAccess(lead.getOwnerUserId(), lead.getTeamId());
     Long pipelineId = body.pipelineId() != null ? body.pipelineId() : lead.getPipelineId();
     CrmPipelineEntity pipeline = resolvePipeline(tenantId, pipelineId);
     CrmStageEntity stage =
@@ -104,6 +111,7 @@ public class CrmLeadService {
   public LeadResponse patchStatus(Long id, LeadStatusPatch body) {
     String tenantId = TenantIds.require();
     CrmLeadEntity lead = requireLead(tenantId, id);
+    recordScopeService.assertCanAccess(lead.getOwnerUserId(), lead.getTeamId());
     Long previousStage = lead.getStageId();
     String previousStatus = lead.getStatus();
     String status = normalizeStatus(body.status());
@@ -152,7 +160,9 @@ public class CrmLeadService {
 
   @Transactional(readOnly = true)
   public LeadResponse get(Long id) {
-    return toResponse(requireLead(TenantIds.require(), id));
+    CrmLeadEntity lead = requireLead(TenantIds.require(), id);
+    recordScopeService.assertCanAccess(lead.getOwnerUserId(), lead.getTeamId());
+    return toResponse(lead);
   }
 
   @Transactional(readOnly = true)
@@ -160,8 +170,29 @@ public class CrmLeadService {
       String status, Long stageId, Long pipelineId, String ownerUserId, String q, Pageable pageable) {
     String tenantId = TenantIds.require();
     String normalizedStatus = status == null || status.isBlank() ? null : normalizeStatus(status);
+    var filter = recordScopeService.listFilter(ownerUserId);
+    String scopeMode = filter.scope().name();
+    String scopeUserId = filter.scopeUserId();
+    List<String> scopeTeamIds =
+        filter.scopeTeamIds() == null || filter.scopeTeamIds().isEmpty()
+            ? List.of("__NONE__")
+            : filter.scopeTeamIds();
+    if (filter.scope() == CrmAccessScope.ORG) {
+      scopeMode = "ORG";
+      scopeUserId = null;
+    }
     return leadRepository
-        .search(tenantId, normalizedStatus, stageId, pipelineId, ownerUserId, q, pageable)
+        .search(
+            tenantId,
+            normalizedStatus,
+            stageId,
+            pipelineId,
+            filter.ownerUserId(),
+            q,
+            scopeMode,
+            scopeUserId,
+            scopeTeamIds,
+            pageable)
         .map(CrmLeadService::toResponse);
   }
 
@@ -169,6 +200,7 @@ public class CrmLeadService {
   public void delete(Long id) {
     String tenantId = TenantIds.require();
     CrmLeadEntity lead = requireLead(tenantId, id);
+    recordScopeService.assertCanAccess(lead.getOwnerUserId(), lead.getTeamId());
     lead.softDelete();
     leadRepository.save(lead);
   }

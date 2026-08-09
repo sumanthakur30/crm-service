@@ -200,7 +200,7 @@ public class OpsService {
     String period = normalizePeriod(periodYm);
     List<CrmOpportunityEntity> open =
         opportunityRepository
-            .search(tenantId, "OPEN", null, null, PageRequest.of(0, 500))
+            .search(tenantId, "OPEN", null, null, "ORG", null, List.of("__NONE__"), PageRequest.of(0, 500))
             .getContent();
     BigDecimal weighted = BigDecimal.ZERO;
     BigDecimal pipeline = BigDecimal.ZERO;
