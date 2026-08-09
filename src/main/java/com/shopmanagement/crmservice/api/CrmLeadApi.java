@@ -59,6 +59,7 @@ public final class CrmLeadApi {
       String status,
       String priority,
       int score,
+      String scoreBand,
       String ownerUserId,
       String teamId,
       BigDecimal amount,

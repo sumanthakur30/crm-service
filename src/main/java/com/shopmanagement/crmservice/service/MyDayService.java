@@ -30,18 +30,21 @@ public class MyDayService {
   private final CrmCalendarEventRepository calendarRepository;
   private final OpsService opsService;
   private final ActivityService activityService;
+  private final ScoreBandService scoreBandService;
 
   public MyDayService(
       CrmTaskRepository taskRepository,
       CrmLeadRepository leadRepository,
       CrmCalendarEventRepository calendarRepository,
       OpsService opsService,
-      ActivityService activityService) {
+      ActivityService activityService,
+      ScoreBandService scoreBandService) {
     this.taskRepository = taskRepository;
     this.leadRepository = leadRepository;
     this.calendarRepository = calendarRepository;
     this.opsService = opsService;
     this.activityService = activityService;
+    this.scoreBandService = scoreBandService;
   }
 
   @Transactional(readOnly = true)
@@ -51,7 +54,10 @@ public class MyDayService {
     LocalDate today = LocalDate.now(ZONE);
     Instant dayStart = today.atStartOfDay(ZONE).toInstant();
     Instant dayEnd = today.plusDays(1).atStartOfDay(ZONE).toInstant();
-    int minScore = hotMinScore == null ? DEFAULT_HOT_SCORE : Math.max(0, hotMinScore);
+    int minScore =
+        hotMinScore == null
+            ? scoreBandService.hotMin()
+            : Math.max(0, hotMinScore);
     int leadCap = hotLimit == null ? 10 : Math.max(1, Math.min(hotLimit, 50));
 
     List<Map<String, Object>> overdue =
@@ -110,6 +116,7 @@ public class MyDayService {
     out.put("dueToday", dueToday);
     out.put("meetingsToday", meetingsToday);
     out.put("hotLeads", hotLeads);
+    out.put("hotMinScore", minScore);
     out.put("openApprovals", openApprovals);
     out.put("recentActivities", recentActivities);
     out.put(

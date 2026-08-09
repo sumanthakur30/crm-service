@@ -62,6 +62,69 @@ public class BehaviorScoringService {
   }
 
   @Transactional
+  public Map<String, Object> upsertRule(Map<String, Object> body) {
+    String tenantId = TenantIds.require();
+    Long id = body.get("id") == null ? null : Long.valueOf(String.valueOf(body.get("id")));
+    CrmScoreRuleEntity rule;
+    if (id != null) {
+      rule =
+          ruleRepository
+              .findByTenantIdAndIdAndDeletedAtIsNull(tenantId, id)
+              .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Rule not found"));
+    } else {
+      String code = String.valueOf(body.getOrDefault("code", "")).trim().toUpperCase(Locale.ROOT);
+      if (code.isBlank()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "code is required");
+      }
+      rule =
+          ruleRepository
+              .findByTenantIdAndCodeAndDeletedAtIsNull(tenantId, code)
+              .orElseGet(
+                  () -> {
+                    CrmScoreRuleEntity created = new CrmScoreRuleEntity();
+                    created.setTenantId(tenantId);
+                    created.setCode(code);
+                    return created;
+                  });
+    }
+    if (body.get("name") != null) {
+      String name = String.valueOf(body.get("name")).trim();
+      if (!name.isBlank()) {
+        rule.setName(name);
+      }
+    }
+    if (rule.getName() == null || rule.getName().isBlank()) {
+      rule.setName(rule.getCode());
+    }
+    if (body.get("eventType") != null) {
+      String eventType = String.valueOf(body.get("eventType")).trim().toUpperCase(Locale.ROOT);
+      if (!eventType.isBlank()) {
+        rule.setEventType(eventType);
+      }
+    }
+    if (rule.getEventType() == null || rule.getEventType().isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "eventType is required");
+    }
+    if (body.get("points") != null) {
+      rule.setPoints(Integer.parseInt(String.valueOf(body.get("points"))));
+    }
+    if (body.get("active") != null) {
+      rule.setActive(Boolean.parseBoolean(String.valueOf(body.get("active"))));
+    }
+    if (body.get("conditionJson") instanceof Map<?, ?> m) {
+      Map<String, Object> cond = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> e : m.entrySet()) {
+        cond.put(String.valueOf(e.getKey()), e.getValue());
+      }
+      rule.setConditionJson(cond);
+    } else if (rule.getConditionJson() == null) {
+      rule.setConditionJson(new LinkedHashMap<>());
+    }
+    rule.touch();
+    return toRule(ruleRepository.save(rule));
+  }
+
+  @Transactional
   public LeadResponse applyEvent(Long leadId, String eventType, String summary, Map<String, Object> payload) {
     String tenantId = TenantIds.require();
     String type = eventType.trim().toUpperCase(Locale.ROOT);
@@ -163,6 +226,7 @@ public class BehaviorScoringService {
     m.put("eventType", r.getEventType());
     m.put("points", r.getPoints());
     m.put("active", r.isActive());
+    m.put("conditionJson", r.getConditionJson() == null ? Map.of() : r.getConditionJson());
     return m;
   }
 }

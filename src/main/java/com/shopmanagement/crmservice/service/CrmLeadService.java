@@ -46,6 +46,7 @@ public class CrmLeadService {
   private final TimelineService timelineService;
   private final StageAutomationService stageAutomationService;
   private final CrmRecordScopeService recordScopeService;
+  private final ScoreBandService scoreBandService;
 
   public CrmLeadService(
       CrmLeadRepository leadRepository,
@@ -57,7 +58,8 @@ public class CrmLeadService {
       WorkspaceBootstrapService workspaceBootstrapService,
       TimelineService timelineService,
       StageAutomationService stageAutomationService,
-      CrmRecordScopeService recordScopeService) {
+      CrmRecordScopeService recordScopeService,
+      ScoreBandService scoreBandService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
@@ -68,6 +70,7 @@ public class CrmLeadService {
     this.timelineService = timelineService;
     this.stageAutomationService = stageAutomationService;
     this.recordScopeService = recordScopeService;
+    this.scoreBandService = scoreBandService;
   }
 
   @Transactional
@@ -181,6 +184,9 @@ public class CrmLeadService {
       scopeMode = "ORG";
       scopeUserId = null;
     }
+    Map<String, Object> bands = scoreBandService.getOrEnsure();
+    int hotMin = ((Number) bands.get("hotMin")).intValue();
+    int warmMin = ((Number) bands.get("warmMin")).intValue();
     return leadRepository
         .search(
             tenantId,
@@ -193,7 +199,7 @@ public class CrmLeadService {
             scopeUserId,
             scopeTeamIds,
             pageable)
-        .map(CrmLeadService::toResponse);
+        .map(lead -> toResponse(lead, ScoreBandService.resolveBand(lead.getScore(), hotMin, warmMin)));
   }
 
   @Transactional
@@ -354,7 +360,11 @@ public class CrmLeadService {
     return value == null || value.isBlank() ? null : value.trim();
   }
 
-  private static LeadResponse toResponse(CrmLeadEntity lead) {
+  private LeadResponse toResponse(CrmLeadEntity lead) {
+    return toResponse(lead, scoreBandService.resolveBand(lead.getScore()));
+  }
+
+  private LeadResponse toResponse(CrmLeadEntity lead, String scoreBand) {
     return new LeadResponse(
         lead.getId(),
         lead.getTenantId(),
@@ -369,6 +379,7 @@ public class CrmLeadService {
         lead.getStatus(),
         lead.getPriority(),
         lead.getScore(),
+        scoreBand,
         lead.getOwnerUserId(),
         lead.getTeamId(),
         lead.getAmount(),
