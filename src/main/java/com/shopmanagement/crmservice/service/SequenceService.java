@@ -350,6 +350,40 @@ public class SequenceService {
     enr.setAttributes(attrs);
     enr.setLastError(null);
 
+    String delStatus = String.valueOf(delivery.getOrDefault("status", "UNKNOWN"));
+    String eventType = "ERROR".equalsIgnoreCase(delStatus) ? "MESSAGE_FAILED" : "MESSAGE_QUEUED";
+    if (enr.getLeadId() != null) {
+      timelineService.recordEvent(
+          "LEAD",
+          enr.getLeadId(),
+          eventType,
+          "Sequence step " + enr.getCurrentStep() + " · " + channel + " · " + delStatus,
+          Map.of(
+              "channel",
+              channel,
+              "enrollmentId",
+              enr.getId(),
+              "step",
+              enr.getCurrentStep(),
+              "status",
+              delStatus));
+    } else if (enr.getOpportunityId() != null) {
+      timelineService.recordEvent(
+          "OPPORTUNITY",
+          enr.getOpportunityId(),
+          eventType,
+          "Sequence step " + enr.getCurrentStep() + " · " + channel + " · " + delStatus,
+          Map.of(
+              "channel",
+              channel,
+              "enrollmentId",
+              enr.getId(),
+              "step",
+              enr.getCurrentStep(),
+              "status",
+              delStatus));
+    }
+
     int nextIndex = enr.getCurrentStep() + 1;
     enr.setCurrentStep(nextIndex);
     if (nextIndex >= steps.size()) {

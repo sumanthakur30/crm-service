@@ -56,6 +56,9 @@ public class SequenceController {
   @ResponseStatus(HttpStatus.CREATED)
   public EnrollmentResponse enroll(@Valid @RequestBody EnrollRequest body) {
     entitlementGuard.requireSequencesAccess();
+    if (body != null && body.channel() != null) {
+      entitlementGuard.requireChannelAccess(body.channel());
+    }
     return sequenceService.enroll(body);
   }
 
