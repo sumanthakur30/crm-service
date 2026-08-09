@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.shopmanagement.crmservice.ai.HeuristicLlmProvider;
 import com.shopmanagement.crmservice.config.CrmAiProperties;
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.persistence.entity.CrmAiInsightEntity;
@@ -39,6 +40,8 @@ class AiAssistServiceTest {
   @Mock private CrmScoreEventRepository scoreEventRepository;
   @Mock private CrmTenantEnterpriseRepository enterpriseRepository;
   @Mock private TimelineService timelineService;
+  @Mock private ScoreBandService scoreBandService;
+  @Mock private UsageMeterService usageMeterService;
 
   private AiAssistService service;
 
@@ -47,6 +50,7 @@ class AiAssistServiceTest {
     CrmAiProperties props = new CrmAiProperties();
     props.setEnabled(true);
     props.setModelCode("HEURISTIC_V1");
+    when(scoreBandService.resolveBand(org.mockito.ArgumentMatchers.anyInt())).thenReturn("WARM");
     service =
         new AiAssistService(
             props,
@@ -57,7 +61,10 @@ class AiAssistServiceTest {
             enterpriseRepository,
             timelineService,
             new com.shopmanagement.crmservice.integration.AiHttpClient(
-                new org.springframework.web.client.RestTemplate(), props));
+                new org.springframework.web.client.RestTemplate(), props),
+            scoreBandService,
+            new HeuristicLlmProvider(),
+            usageMeterService);
     TenantContextFilter.bindTenantForTests("demo-crm");
   }
 
