@@ -23,9 +23,11 @@ public class UsageMeterService {
 
   public static final String METER_SEATS = "SEATS";
   public static final String METER_API = "API_CALLS_MONTH";
+  public static final String METER_AI = "AI_CALLS_MONTH";
   public static final String PERIOD_ALL = "ALL";
   public static final String LIMIT_SEATS = "crm.max_users";
   public static final String LIMIT_API = "crm.max_api_calls_month";
+  public static final String LIMIT_AI = "crm.max_ai_calls_month";
 
   private final CrmUsageCounterRepository counterRepository;
   private final CrmTeamMemberRepository teamMemberRepository;
@@ -62,17 +64,38 @@ public class UsageMeterService {
     return next;
   }
 
+  @Transactional
+  public long incrementAiCall(String tenantId) {
+    String period = currentMonthPeriod();
+    CrmUsageCounterEntity row = loadOrCreate(tenantId, METER_AI, period);
+    long next = row.getUsedCount() + 1;
+    row.setUsedCount(next);
+    row.setUpdatedAt(Instant.now());
+    counterRepository.save(row);
+    if (entitlementProperties.isEnabled()) {
+      Long limit = safeLimit(tenantId, LIMIT_AI);
+      if (limit != null && limit >= 0 && next > limit) {
+        throw new CrmMeterExceededException(
+            "CRM_AI_METER_EXCEEDED",
+            "AI call meter exceeded for period " + period + " (limit " + limit + ")");
+      }
+    }
+    return next;
+  }
+
   @Transactional(readOnly = true)
   public Map<String, Object> snapshot() {
     String tenantId = TenantIds.require();
     String period = currentMonthPeriod();
     long apiUsed = apiCallCounter.get(tenantId, period);
+    long aiUsed = used(tenantId, METER_AI, period);
     long seatsUsed = used(tenantId, METER_SEATS, PERIOD_ALL);
     if (seatsUsed == 0) {
       seatsUsed = teamMemberRepository.countByTenantIdAndActiveTrueAndDeletedAtIsNull(tenantId);
     }
     Long seatsLimit = entitlementProperties.isEnabled() ? safeLimit(tenantId, LIMIT_SEATS) : null;
     Long apiLimit = entitlementProperties.isEnabled() ? safeLimit(tenantId, LIMIT_API) : null;
+    Long aiLimit = entitlementProperties.isEnabled() ? safeLimit(tenantId, LIMIT_AI) : null;
 
     Map<String, Object> seats = new LinkedHashMap<>();
     seats.put("used", seatsUsed);
@@ -84,9 +107,15 @@ public class UsageMeterService {
     api.put("period", period);
     api.put("backend", apiCallCounter.getClass().getSimpleName());
 
+    Map<String, Object> ai = new LinkedHashMap<>();
+    ai.put("used", aiUsed);
+    ai.put("limit", aiLimit);
+    ai.put("period", period);
+
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("seats", seats);
     out.put("apiCallsMonth", api);
+    out.put("aiCallsMonth", ai);
     out.put("enforcementEnabled", entitlementProperties.isEnabled());
     return out;
   }
