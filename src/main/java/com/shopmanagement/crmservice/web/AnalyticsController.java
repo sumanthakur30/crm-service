@@ -26,4 +26,10 @@ public class AnalyticsController {
     entitlementGuard.requireCrmAccess();
     return analyticsService.summary();
   }
+
+  @GetMapping("/pipeline")
+  public Map<String, Object> pipeline() {
+    entitlementGuard.requireCrmAccess();
+    return analyticsService.pipeline();
+  }
 }

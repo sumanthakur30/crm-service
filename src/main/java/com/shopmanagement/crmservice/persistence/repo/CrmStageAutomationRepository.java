@@ -14,5 +14,8 @@ public interface CrmStageAutomationRepository extends JpaRepository<CrmStageAuto
   List<CrmStageAutomationEntity> findByTenantIdAndDeletedAtIsNullOrderByObjectTypeAscSortOrderAscIdAsc(
       String tenantId);
 
+  java.util.Optional<CrmStageAutomationEntity> findByTenantIdAndIdAndDeletedAtIsNull(
+      String tenantId, Long id);
+
   long countByTenantIdAndDeletedAtIsNull(String tenantId);
 }

@@ -31,6 +31,18 @@ public interface CrmOpportunityRepository extends JpaRepository<CrmOpportunityEn
   List<Object[]> openFunnelByStage(@Param("tenantId") String tenantId);
 
   long countByTenantIdAndStatusAndDeletedAtIsNull(String tenantId, String status);
+
+  List<CrmOpportunityEntity> findByTenantIdAndStatusAndDeletedAtIsNull(String tenantId, String status);
+
+  @Query(
+      """
+      SELECT COALESCE(o.closeReasonCode, 'UNKNOWN'), COUNT(o), COALESCE(SUM(o.amount), 0)
+      FROM CrmOpportunityEntity o
+      WHERE o.tenantId = :tenantId AND o.deletedAt IS NULL AND o.status = :status
+      GROUP BY COALESCE(o.closeReasonCode, 'UNKNOWN')
+      ORDER BY COUNT(o) DESC
+      """)
+  List<Object[]> countClosedByReason(@Param("tenantId") String tenantId, @Param("status") String status);
   @Query(
       """
       SELECT o FROM CrmOpportunityEntity o

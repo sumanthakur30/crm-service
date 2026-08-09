@@ -70,4 +70,28 @@ public class SequenceController {
     entitlementGuard.requireSequencesAccess();
     return sequenceService.processDue(limit);
   }
+
+  @PostMapping("/enrollments/{id}/pause")
+  public EnrollmentResponse pause(@org.springframework.web.bind.annotation.PathVariable Long id) {
+    entitlementGuard.requireSequencesAccess();
+    return sequenceService.pauseEnrollment(id);
+  }
+
+  @PostMapping("/enrollments/{id}/resume")
+  public EnrollmentResponse resume(@org.springframework.web.bind.annotation.PathVariable Long id) {
+    entitlementGuard.requireSequencesAccess();
+    return sequenceService.resumeEnrollment(id);
+  }
+
+  @PostMapping("/enrollments/{id}/cancel")
+  public EnrollmentResponse cancel(@org.springframework.web.bind.annotation.PathVariable Long id) {
+    entitlementGuard.requireSequencesAccess();
+    return sequenceService.cancelEnrollment(id);
+  }
+
+  @PostMapping("/enrollments/{id}/retry")
+  public EnrollmentResponse retry(@org.springframework.web.bind.annotation.PathVariable Long id) {
+    entitlementGuard.requireSequencesAccess();
+    return sequenceService.retryEnrollment(id);
+  }
 }

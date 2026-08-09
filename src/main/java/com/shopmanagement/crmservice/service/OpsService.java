@@ -235,6 +235,7 @@ public class OpsService {
     collaborative.put("pipelineWeighted", weighted);
     collaborative.put("commitTotal", commitTotal);
     collaborative.put("combined", weighted.add(commitTotal));
+    collaborative.put("gapCommitVsWeighted", commitTotal.subtract(weighted));
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("openCount", open.size());
@@ -245,7 +246,13 @@ public class OpsService {
     out.put("periodYm", period);
     out.put("commits", commitRows);
     out.put("commitTotal", commitTotal);
+    out.put("gapCommitVsWeighted", commitTotal.subtract(weighted));
     out.put("collaborative", collaborative);
+    out.put(
+        "managerHint",
+        commitTotal.compareTo(weighted) >= 0
+            ? "Commits at/above weighted pipeline"
+            : "Commits below weighted pipeline — review gaps");
     return out;
   }
 

@@ -215,6 +215,61 @@ public class SequenceService {
   }
 
   @Transactional
+  public EnrollmentResponse pauseEnrollment(Long id) {
+    return setEnrollmentStatus(id, "PAUSED", Set.of("ACTIVE"));
+  }
+
+  @Transactional
+  public EnrollmentResponse resumeEnrollment(Long id) {
+    CrmSequenceEnrollmentEntity enr = requireEnrollment(id);
+    if (!"PAUSED".equalsIgnoreCase(enr.getStatus())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PAUSED enrollments can resume");
+    }
+    enr.setStatus("ACTIVE");
+    if (enr.getNextRunAt() == null || enr.getNextRunAt().isBefore(Instant.now())) {
+      enr.setNextRunAt(Instant.now());
+    }
+    enr.setLastError(null);
+    enr.touch();
+    return toEnrollment(enrollmentRepository.save(enr));
+  }
+
+  @Transactional
+  public EnrollmentResponse cancelEnrollment(Long id) {
+    return setEnrollmentStatus(id, "CANCELLED", Set.of("ACTIVE", "PAUSED", "FAILED"));
+  }
+
+  @Transactional
+  public EnrollmentResponse retryEnrollment(Long id) {
+    CrmSequenceEnrollmentEntity enr = requireEnrollment(id);
+    if (!"FAILED".equalsIgnoreCase(enr.getStatus())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only FAILED enrollments can retry");
+    }
+    enr.setStatus("ACTIVE");
+    enr.setNextRunAt(Instant.now());
+    enr.setLastError(null);
+    enr.touch();
+    return toEnrollment(enrollmentRepository.save(enr));
+  }
+
+  private EnrollmentResponse setEnrollmentStatus(Long id, String status, Set<String> allowedFrom) {
+    CrmSequenceEnrollmentEntity enr = requireEnrollment(id);
+    if (!allowedFrom.contains(enr.getStatus() == null ? "" : enr.getStatus().toUpperCase(Locale.ROOT))) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Cannot set " + status + " from " + enr.getStatus());
+    }
+    enr.setStatus(status);
+    enr.touch();
+    return toEnrollment(enrollmentRepository.save(enr));
+  }
+
+  private CrmSequenceEnrollmentEntity requireEnrollment(Long id) {
+    return enrollmentRepository
+        .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Enrollment not found"));
+  }
+
+  @Transactional
   public ProcessDueResponse processDue(int limit) {
     String tenantId = TenantIds.require();
     Instant now = Instant.now();
