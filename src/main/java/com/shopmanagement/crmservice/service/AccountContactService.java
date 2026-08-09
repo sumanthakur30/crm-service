@@ -26,16 +26,19 @@ public class AccountContactService {
   private final CrmContactRepository contactRepository;
   private final CrmLeadRepository leadRepository;
   private final CrmOpportunityRepository opportunityRepository;
+  private final ErpFederationService erpFederationService;
 
   public AccountContactService(
       CrmAccountRepository accountRepository,
       CrmContactRepository contactRepository,
       CrmLeadRepository leadRepository,
-      CrmOpportunityRepository opportunityRepository) {
+      CrmOpportunityRepository opportunityRepository,
+      ErpFederationService erpFederationService) {
     this.accountRepository = accountRepository;
     this.contactRepository = contactRepository;
     this.leadRepository = leadRepository;
     this.opportunityRepository = opportunityRepository;
+    this.erpFederationService = erpFederationService;
   }
 
   @Transactional
@@ -169,6 +172,7 @@ public class AccountContactService {
     out.put("contacts", contacts);
     out.put("leads", leads);
     out.put("opportunities", opportunities);
+    out.put("erp", erpFederationService.accountErpStrip(accountId));
     return out;
   }
 

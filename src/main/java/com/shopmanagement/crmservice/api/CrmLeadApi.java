@@ -104,7 +104,11 @@ public final class CrmLeadApi {
       /** Wire formats: Meta {@code X-Hub-Signature-256: sha256=<hex>} and raw hex {@code X-Crm-Signature}. */
       String inboundSignatureFormats,
       String ctiProvider,
-      String aiProvider) {}
+      String aiProvider,
+      /** Quote ACCEPT → order-service create path. */
+      boolean orderEnabled,
+      /** True when default product id is configured (customer may still come from lead convert). */
+      boolean orderProductMapped) {}
 
   public record AssignRequest(String mode, String ownerUserId, String teamId) {}
 

@@ -36,6 +36,7 @@ class LeadConvertServiceTest {
   @Mock private CrmConvertEventRepository convertEventRepository;
   @Mock private RestTemplate restTemplate;
   @Mock private TimelineService timelineService;
+  @Mock private ErpFederationService erpFederationService;
 
   private CrmConvertProperties properties;
   private LeadConvertService service;
@@ -47,7 +48,12 @@ class LeadConvertServiceTest {
     properties.setShopCustomerUrl("http://localhost:8095/api/v1/crm/adapters/erp/SHOP_CUSTOMER");
     service =
         new LeadConvertService(
-            leadRepository, convertEventRepository, properties, restTemplate, timelineService);
+            leadRepository,
+            convertEventRepository,
+            properties,
+            restTemplate,
+            timelineService,
+            erpFederationService);
     TenantContextFilter.bindTenantForTests("42");
     TenantContextFilter.bindShopForTests("99");
   }

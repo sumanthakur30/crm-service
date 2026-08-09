@@ -37,18 +37,21 @@ public class LeadConvertService {
   private final CrmConvertProperties properties;
   private final RestTemplate restTemplate;
   private final TimelineService timelineService;
+  private final ErpFederationService erpFederationService;
 
   public LeadConvertService(
       CrmLeadRepository leadRepository,
       CrmConvertEventRepository convertEventRepository,
       CrmConvertProperties properties,
       RestTemplate crmRestTemplate,
-      TimelineService timelineService) {
+      TimelineService timelineService,
+      ErpFederationService erpFederationService) {
     this.leadRepository = leadRepository;
     this.convertEventRepository = convertEventRepository;
     this.properties = properties;
     this.restTemplate = crmRestTemplate;
     this.timelineService = timelineService;
+    this.erpFederationService = erpFederationService;
   }
 
   @Transactional
@@ -234,6 +237,14 @@ public class LeadConvertService {
     }
     lead.touch();
     leadRepository.save(lead);
+    if ("SHOP_CUSTOMER".equals(target) && lead.getAccountId() != null && event.getExternalId() != null) {
+      try {
+        Long shopCustomerId = Long.parseLong(String.valueOf(event.getExternalId()).trim());
+        erpFederationService.stampShopCustomerOnAccount(lead.getAccountId(), shopCustomerId);
+      } catch (NumberFormatException ignored) {
+        // non-numeric sink ids are fine to skip
+      }
+    }
   }
 
   private Map<String, Object> toResponse(

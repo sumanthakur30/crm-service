@@ -18,6 +18,7 @@ import com.shopmanagement.crmservice.config.CrmAiProperties;
 import com.shopmanagement.crmservice.config.CrmConvertProperties;
 import com.shopmanagement.crmservice.config.CrmCtiProperties;
 import com.shopmanagement.crmservice.config.CrmInboundProperties;
+import com.shopmanagement.crmservice.config.CrmOrderProperties;
 import com.shopmanagement.crmservice.config.CrmProperties;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.WorkspaceBootstrapService;
@@ -36,6 +37,7 @@ public class CrmWorkspaceController {
   private final CrmCtiProperties ctiProperties;
   private final CrmInboundProperties inboundProperties;
   private final CrmAiProperties aiProperties;
+  private final CrmOrderProperties orderProperties;
 
   public CrmWorkspaceController(
       WorkspaceBootstrapService workspaceBootstrapService,
@@ -44,7 +46,8 @@ public class CrmWorkspaceController {
       CrmConvertProperties convertProperties,
       CrmCtiProperties ctiProperties,
       CrmInboundProperties inboundProperties,
-      CrmAiProperties aiProperties) {
+      CrmAiProperties aiProperties,
+      CrmOrderProperties orderProperties) {
     this.workspaceBootstrapService = workspaceBootstrapService;
     this.entitlementGuard = entitlementGuard;
     this.crmProperties = crmProperties;
@@ -52,6 +55,7 @@ public class CrmWorkspaceController {
     this.ctiProperties = ctiProperties;
     this.inboundProperties = inboundProperties;
     this.aiProperties = aiProperties;
+    this.orderProperties = orderProperties;
   }
 
   @GetMapping("/status")
@@ -65,7 +69,9 @@ public class CrmWorkspaceController {
         inboundProperties.isSigningEnabled(),
         INBOUND_SIGNATURE_FORMATS,
         ctiProperties.getProvider() == null ? "STUB" : ctiProperties.getProvider(),
-        aiProperties.getProvider() == null ? "HEURISTIC" : aiProperties.getProvider());
+        aiProperties.getProvider() == null ? "HEURISTIC" : aiProperties.getProvider(),
+        orderProperties.isEnabled(),
+        orderProperties.getDefaultProductId() != null);
   }
 
   @PostMapping("/workspaces/bootstrap")
