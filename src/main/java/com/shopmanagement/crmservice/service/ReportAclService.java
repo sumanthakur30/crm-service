@@ -89,12 +89,18 @@ public class ReportAclService {
   @Transactional
   public Map<String, Object> runDueReports() {
     String tenantId = TenantIds.require();
+    Instant now = Instant.now();
     int ran = 0;
+    int skipped = 0;
     List<Map<String, Object>> results = new ArrayList<>();
     for (CrmReportScheduleEntity s :
         reportRepository.findByTenantIdAndActiveTrueAndDeletedAtIsNull(tenantId)) {
+      if (!isDue(s, now)) {
+        skipped++;
+        continue;
+      }
       Map<String, Object> snapshot = buildReport(s.getReportType());
-      s.setLastRunAt(Instant.now());
+      s.setLastRunAt(now);
       s.setLastResultJson(snapshot);
       s.touch();
       reportRepository.save(s);
@@ -106,7 +112,20 @@ public class ReportAclService {
       results.add(row);
       ran++;
     }
-    return Map.of("ran", ran, "results", results);
+    return Map.of("ran", ran, "skipped", skipped, "results", results);
+  }
+
+  @Transactional(readOnly = true)
+  public Map<String, Object> lastResult(String code) {
+    String tenantId = TenantIds.require();
+    String c = code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
+    CrmReportScheduleEntity s =
+        reportRepository
+            .findByTenantIdAndCodeAndDeletedAtIsNull(tenantId, c)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
+    Map<String, Object> out = toSchedule(s);
+    out.put("lastResult", s.getLastResultJson() == null ? Map.of() : s.getLastResultJson());
+    return out;
   }
 
   @Transactional
@@ -196,8 +215,21 @@ public class ReportAclService {
   private Map<String, Object> buildReport(String reportType) {
     return switch (reportType) {
       case "FORECAST" -> opsService.forecast();
-      case "FUNNEL", "SOURCES", "CAMPAIGNS", "OVERDUE" -> analyticsService.summary();
+      case "FUNNEL", "SOURCES", "CAMPAIGNS", "OVERDUE" -> analyticsService.reportSlice(reportType);
       default -> Map.of("error", "unknown report");
+    };
+  }
+
+  private static boolean isDue(CrmReportScheduleEntity s, Instant now) {
+    Instant last = s.getLastRunAt();
+    if (last == null) {
+      return true;
+    }
+    long hours = java.time.Duration.between(last, now).toHours();
+    return switch (s.getFrequency() == null ? "DAILY" : s.getFrequency().toUpperCase(Locale.ROOT)) {
+      case "HOURLY" -> hours >= 1;
+      case "WEEKLY" -> hours >= 24 * 7;
+      default -> hours >= 24;
     };
   }
 

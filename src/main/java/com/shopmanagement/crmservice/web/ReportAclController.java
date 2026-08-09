@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,6 +42,12 @@ public class ReportAclController {
   public Map<String, Object> runDue() {
     entitlementGuard.requireCrmAccess();
     return reportAclService.runDueReports();
+  }
+
+  @GetMapping("/reports/schedules/{code}/last-result")
+  public Map<String, Object> lastResult(@PathVariable String code) {
+    entitlementGuard.requireCrmAccess();
+    return reportAclService.lastResult(code);
   }
 
   @GetMapping("/acl/fields")

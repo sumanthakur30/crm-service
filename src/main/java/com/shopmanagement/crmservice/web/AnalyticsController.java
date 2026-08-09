@@ -1,7 +1,11 @@
 package com.shopmanagement.crmservice.web;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,5 +35,21 @@ public class AnalyticsController {
   public Map<String, Object> pipeline() {
     entitlementGuard.requireCrmAccess();
     return analyticsService.pipeline();
+  }
+
+  @GetMapping("/dashboard")
+  public Map<String, Object> dashboard() {
+    entitlementGuard.requireCrmAccess();
+    return analyticsService.dashboard();
+  }
+
+  @GetMapping(value = "/export.csv", produces = "text/csv")
+  public ResponseEntity<byte[]> exportCsv() {
+    entitlementGuard.requireCrmAccess();
+    byte[] body = analyticsService.exportCsv().getBytes(StandardCharsets.UTF_8);
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"crm-analytics.csv\"")
+        .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+        .body(body);
   }
 }
