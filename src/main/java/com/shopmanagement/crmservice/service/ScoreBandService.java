@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -25,7 +26,8 @@ public class ScoreBandService {
     this.bandRepository = bandRepository;
   }
 
-  @Transactional
+  /** Ensures default bands exist; REQUIRES_NEW so callers in readOnly txs (e.g. lead search) can seed. */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Map<String, Object> getOrEnsure() {
     return toMap(ensureEntity(TenantIds.require()));
   }
