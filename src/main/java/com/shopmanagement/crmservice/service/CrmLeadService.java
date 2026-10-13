@@ -47,6 +47,7 @@ public class CrmLeadService {
   private final StageAutomationService stageAutomationService;
   private final CrmRecordScopeService recordScopeService;
   private final ScoreBandService scoreBandService;
+  private final FollowUpTaskService followUpTaskService;
 
   public CrmLeadService(
       CrmLeadRepository leadRepository,
@@ -59,7 +60,8 @@ public class CrmLeadService {
       TimelineService timelineService,
       StageAutomationService stageAutomationService,
       CrmRecordScopeService recordScopeService,
-      ScoreBandService scoreBandService) {
+      ScoreBandService scoreBandService,
+      FollowUpTaskService followUpTaskService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
@@ -71,6 +73,7 @@ public class CrmLeadService {
     this.stageAutomationService = stageAutomationService;
     this.recordScopeService = recordScopeService;
     this.scoreBandService = scoreBandService;
+    this.followUpTaskService = followUpTaskService;
   }
 
   @Transactional
@@ -86,6 +89,7 @@ public class CrmLeadService {
       lead.setOwnerUserId(TenantIds.currentUserOrNull());
     }
     lead = leadRepository.save(lead);
+    followUpTaskService.syncLead(lead);
     timelineService.recordEvent(
         "LEAD",
         lead.getId(),
@@ -107,7 +111,9 @@ public class CrmLeadService {
             tenantId, pipeline.getId(), body.stageId() != null ? body.stageId() : lead.getStageId());
     apply(lead, body, pipeline.getId(), stage.getId(), false);
     lead.touch();
-    return toResponse(leadRepository.save(lead));
+    lead = leadRepository.save(lead);
+    followUpTaskService.syncLead(lead);
+    return toResponse(lead);
   }
 
   @Transactional

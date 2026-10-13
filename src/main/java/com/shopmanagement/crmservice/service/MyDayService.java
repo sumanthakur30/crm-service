@@ -1,8 +1,10 @@
 package com.shopmanagement.crmservice.service;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -132,6 +134,62 @@ public class MyDayService {
             hotLeads.size(),
             "openApprovals",
             openApprovals.size()));
+    return out;
+  }
+
+  /** Monday–Sunday week in {@link #ZONE}. Tasks and meetings are grouped by that local date. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> week(LocalDate weekOf) {
+    String tenantId = TenantIds.require();
+    LocalDate anchor = weekOf == null ? LocalDate.now(ZONE) : weekOf;
+    LocalDate weekStart = anchor.with(DayOfWeek.MONDAY);
+    LocalDate weekEnd = weekStart.plusDays(7);
+    Instant from = weekStart.atStartOfDay(ZONE).toInstant();
+    Instant to = weekEnd.atStartOfDay(ZONE).toInstant();
+
+    List<CrmTaskEntity> tasks =
+        taskRepository
+            .findByTenantIdAndStatusAndDueAtGreaterThanEqualAndDueAtLessThanAndDeletedAtIsNullOrderByDueAtAsc(
+                tenantId, "OPEN", from, to);
+    var meetings =
+        calendarRepository
+            .findByTenantIdAndStartsAtGreaterThanEqualAndStartsAtLessThanAndDeletedAtIsNullOrderByStartsAtAsc(
+                tenantId, from, to);
+
+    List<Map<String, Object>> days = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+      LocalDate date = weekStart.plusDays(i);
+      List<Map<String, Object>> dayTasks = new ArrayList<>();
+      for (CrmTaskEntity task : tasks) {
+        if (task.getDueAt() != null && date.equals(task.getDueAt().atZone(ZONE).toLocalDate())) {
+          dayTasks.add(toTask(task));
+        }
+      }
+      List<Map<String, Object>> dayMeetings = new ArrayList<>();
+      for (var event : meetings) {
+        if (date.equals(event.getStartsAt().atZone(ZONE).toLocalDate())) {
+          Map<String, Object> m = new LinkedHashMap<>();
+          m.put("id", event.getId());
+          m.put("title", event.getTitle());
+          m.put("startsAt", event.getStartsAt());
+          m.put("endsAt", event.getEndsAt());
+          m.put("relatedType", event.getRelatedType());
+          m.put("relatedId", event.getRelatedId());
+          dayMeetings.add(m);
+        }
+      }
+      Map<String, Object> day = new LinkedHashMap<>();
+      day.put("date", date.toString());
+      day.put("tasks", dayTasks);
+      day.put("meetings", dayMeetings);
+      days.add(day);
+    }
+
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("timezone", ZONE.getId());
+    out.put("weekStart", weekStart.toString());
+    out.put("weekEnd", weekStart.plusDays(6).toString());
+    out.put("days", days);
     return out;
   }
 

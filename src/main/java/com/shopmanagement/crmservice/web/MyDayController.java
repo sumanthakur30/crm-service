@@ -1,6 +1,7 @@
 package com.shopmanagement.crmservice.web;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -37,6 +38,13 @@ public class MyDayController {
       @RequestParam(required = false) Integer hotLimit) {
     entitlementGuard.requireCrmAccess();
     return myDayService.snapshot(hotMinScore, hotLimit);
+  }
+
+  @GetMapping("/my-day/week")
+  public Map<String, Object> week(
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekOf) {
+    entitlementGuard.requireCrmAccess();
+    return myDayService.week(weekOf);
   }
 
   @GetMapping("/activities")
