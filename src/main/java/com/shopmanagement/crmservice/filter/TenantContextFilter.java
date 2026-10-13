@@ -46,32 +46,19 @@ public class TenantContextFilter extends OncePerRequestFilter {
     response.setHeader(REQUEST_ID_HEADER, requestId);
 
     try {
-      if (!"OPTIONS".equalsIgnoreCase(request.getMethod()) && !skipsTenant(request.getRequestURI())) {
-        String tenantId = request.getHeader(TENANT_ID_HEADER);
-        if (tenantId == null || tenantId.isBlank()) {
-          response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-          response.setContentType("application/json");
-          response.getWriter().write("{\"message\":\"Missing tenant context header: X-Tenant-Id\"}");
-          return;
+      if (!"OPTIONS".equalsIgnoreCase(request.getMethod())) {
+        if (skipsTenant(request.getRequestURI())) {
+          bindPresentHeaders(request);
+        } else {
+          String tenantId = request.getHeader(TENANT_ID_HEADER);
+          if (tenantId == null || tenantId.isBlank()) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"message\":\"Missing tenant context header: X-Tenant-Id\"}");
+            return;
+          }
+          bindPresentHeaders(request);
         }
-        CURRENT_TENANT.set(tenantId.trim());
-        String shopId = request.getHeader(SHOP_ID_HEADER);
-        if (shopId != null && !shopId.isBlank()) {
-          CURRENT_SHOP.set(shopId.trim());
-        }
-        String userId = request.getHeader(USER_ID_HEADER);
-        if (userId != null && !userId.isBlank()) {
-          CURRENT_USER.set(userId.trim());
-        }
-        String role = request.getHeader(AUTH_ROLE_HEADER);
-        if (role != null && !role.isBlank()) {
-          CURRENT_AUTH_ROLE.set(role.trim());
-        }
-        String scope = request.getHeader(ACCESS_SCOPE_HEADER);
-        if (scope != null && !scope.isBlank()) {
-          CURRENT_ACCESS_SCOPE.set(scope.trim());
-        }
-        CURRENT_JWT_TENANT.set(JwtTenantClaim.positiveTenantId(request.getHeader("Authorization")));
       }
       filterChain.doFilter(request, response);
     } finally {
@@ -138,6 +125,31 @@ public class TenantContextFilter extends OncePerRequestFilter {
     CURRENT_AUTH_ROLE.remove();
     CURRENT_ACCESS_SCOPE.remove();
     CURRENT_JWT_TENANT.remove();
+  }
+
+  /** Shop, user, role, and sign-in tenant when the client sent them. Does not require a tenant. */
+  private static void bindPresentHeaders(HttpServletRequest request) {
+    String tenantId = request.getHeader(TENANT_ID_HEADER);
+    if (tenantId != null && !tenantId.isBlank()) {
+      CURRENT_TENANT.set(tenantId.trim());
+    }
+    String shopId = request.getHeader(SHOP_ID_HEADER);
+    if (shopId != null && !shopId.isBlank()) {
+      CURRENT_SHOP.set(shopId.trim());
+    }
+    String userId = request.getHeader(USER_ID_HEADER);
+    if (userId != null && !userId.isBlank()) {
+      CURRENT_USER.set(userId.trim());
+    }
+    String role = request.getHeader(AUTH_ROLE_HEADER);
+    if (role != null && !role.isBlank()) {
+      CURRENT_AUTH_ROLE.set(role.trim());
+    }
+    String scope = request.getHeader(ACCESS_SCOPE_HEADER);
+    if (scope != null && !scope.isBlank()) {
+      CURRENT_ACCESS_SCOPE.set(scope.trim());
+    }
+    CURRENT_JWT_TENANT.set(JwtTenantClaim.positiveTenantId(request.getHeader("Authorization")));
   }
 
   private static boolean skipsTenant(String uri) {
