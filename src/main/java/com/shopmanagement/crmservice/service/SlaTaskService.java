@@ -83,6 +83,11 @@ public class SlaTaskService {
 
   @Transactional
   public Map<String, Object> completeTask(Long id) {
+    return completeTask(id, null, null);
+  }
+
+  @Transactional
+  public Map<String, Object> completeTask(Long id, String nextFollowUpDate, String note) {
     CrmTaskEntity task =
         taskRepository
             .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), id)
@@ -91,7 +96,7 @@ public class SlaTaskService {
     task.setCompletedAt(Instant.now());
     task.touch();
     CrmTaskEntity saved = taskRepository.save(task);
-    followUpTaskService.completeFollowUp(saved);
+    followUpTaskService.completeFollowUp(saved, nextFollowUpDate, note);
     return toTask(saved);
   }
 

@@ -1,6 +1,7 @@
 package com.shopmanagement.crmservice.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -17,6 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -247,6 +249,60 @@ class FollowUpTaskServiceTest {
     verify(timelineService)
         .recordEvent(eq("LEAD"), eq(7L), eq("FOLLOW_UP_COMPLETED"), eq("Follow-up completed"), eq(Map.of("taskId", 4L)));
     verifyNoInteractions(opportunityRepository);
+  }
+
+  @Test
+  void completingWithANextDateOpensOneNewTaskAndKeepsTheNote() {
+    CrmLeadEntity lead = new CrmLeadEntity();
+    lead.setId(7L);
+    lead.setTenantId("tenant-demo");
+    lead.setTitle("Acme inquiry");
+    lead.setPriority("HIGH");
+    lead.setOwnerUserId("user-1");
+    Map<String, Object> profile = new LinkedHashMap<>();
+    profile.put("nextFollowUpDate", "2026-10-20");
+    profile.put("designation", "Buyer");
+    lead.setAttributes(new LinkedHashMap<>(Map.of("profile", profile)));
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("tenant-demo", 7L)).thenReturn(Optional.of(lead));
+    when(taskRepository
+            .findByTenantIdAndRelatedTypeAndRelatedIdAndSourceCodeAndStatusAndDeletedAtIsNullOrderByIdAsc(
+                "tenant-demo", "LEAD", 7L, FollowUpTaskService.SOURCE_LEAD_FOLLOW_UP, "OPEN"))
+        .thenReturn(List.of());
+    CrmTaskEntity task = openTask();
+    task.setSourceCode(FollowUpTaskService.SOURCE_LEAD_FOLLOW_UP);
+    task.setStatus("DONE");
+
+    service.completeFollowUp(task, "2026-10-27", "Spoke with the buyer");
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> savedProfile = (Map<String, Object>) lead.getAttributes().get("profile");
+    assertThat(savedProfile).containsEntry("nextFollowUpDate", "2026-10-27");
+    assertThat(savedProfile).containsEntry("designation", "Buyer");
+    verify(timelineService)
+        .recordEvent(
+            eq("LEAD"),
+            eq(7L),
+            eq("FOLLOW_UP_COMPLETED"),
+            eq("Follow-up completed: Spoke with the buyer"),
+            eq(Map.of("taskId", 4L, "note", "Spoke with the buyer")));
+    ArgumentCaptor<CrmTaskEntity> captor = ArgumentCaptor.forClass(CrmTaskEntity.class);
+    verify(taskRepository).save(captor.capture());
+    CrmTaskEntity created = captor.getValue();
+    assertThat(created.getId()).isNull();
+    assertThat(created.getStatus()).isEqualTo("OPEN");
+    assertThat(created.getSourceCode()).isEqualTo("LEAD_FOLLOW_UP");
+    assertThat(created.getDueAt()).isEqualTo(FollowUpTaskService.dueAtEndOfDay(LocalDate.parse("2026-10-27")));
+  }
+
+  @Test
+  void aBadNextDateDoesNotClearTheFollowUp() {
+    CrmTaskEntity task = openTask();
+    task.setSourceCode(FollowUpTaskService.SOURCE_LEAD_FOLLOW_UP);
+
+    assertThatThrownBy(() -> service.completeFollowUp(task, "20-10-2026", null))
+        .isInstanceOf(ResponseStatusException.class);
+
+    verifyNoInteractions(leadRepository, opportunityRepository, timelineService);
   }
 
   @Test

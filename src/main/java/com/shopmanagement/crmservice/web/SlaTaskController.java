@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -43,8 +44,13 @@ public class SlaTaskController {
   }
 
   @PostMapping("/{id}/complete")
-  public Map<String, Object> complete(@PathVariable Long id) {
+  public Map<String, Object> complete(
+      @PathVariable Long id, @RequestBody(required = false) TaskCompletion body) {
     entitlementGuard.requireCrmAccess();
-    return slaTaskService.completeTask(id);
+    String nextFollowUpDate = body == null ? null : body.nextFollowUpDate();
+    String note = body == null ? null : body.note();
+    return slaTaskService.completeTask(id, nextFollowUpDate, note);
   }
+
+  public record TaskCompletion(String nextFollowUpDate, String note) {}
 }

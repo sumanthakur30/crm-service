@@ -7,8 +7,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
@@ -138,28 +140,60 @@ public class FollowUpTaskService {
    */
   @Transactional
   public void completeFollowUp(CrmTaskEntity task) {
+    completeFollowUp(task, null, null);
+  }
+
+  /**
+   * Closes the current follow-up. A next date schedules one new open task. A note is stored on the
+   * completion event. A blank next date leaves the record without a follow-up.
+   */
+  @Transactional
+  public void completeFollowUp(CrmTaskEntity task, String nextFollowUpDate, String note) {
     if (task == null || task.getRelatedId() == null || task.getTenantId() == null) {
       return;
     }
+    String scheduled = normalizeDate(nextFollowUpDate);
+    String outcome = normalizeNote(note);
     if (SOURCE_LEAD_FOLLOW_UP.equals(task.getSourceCode())) {
       leadRepository
           .findByTenantIdAndIdAndDeletedAtIsNull(task.getTenantId(), task.getRelatedId())
-          .ifPresent(lead -> finish(lead.getAttributes(), lead::setAttributes, lead::touch, () -> leadRepository.save(lead), RELATED_LEAD, lead.getId(), task.getId()));
+          .ifPresent(
+              lead -> {
+                finish(
+                    lead.getAttributes(),
+                    lead::setAttributes,
+                    lead::touch,
+                    () -> leadRepository.save(lead),
+                    RELATED_LEAD,
+                    lead.getId(),
+                    task.getId(),
+                    scheduled,
+                    outcome);
+                if (scheduled != null) {
+                  syncLead(lead);
+                }
+              });
       return;
     }
     if (SOURCE_OPPORTUNITY_FOLLOW_UP.equals(task.getSourceCode())) {
       opportunityRepository
           .findByTenantIdAndIdAndDeletedAtIsNull(task.getTenantId(), task.getRelatedId())
           .ifPresent(
-              deal ->
-                  finish(
-                      deal.getAttributes(),
-                      deal::setAttributes,
-                      deal::touch,
-                      () -> opportunityRepository.save(deal),
-                      RELATED_OPPORTUNITY,
-                      deal.getId(),
-                      task.getId()));
+              deal -> {
+                finish(
+                    deal.getAttributes(),
+                    deal::setAttributes,
+                    deal::touch,
+                    () -> opportunityRepository.save(deal),
+                    RELATED_OPPORTUNITY,
+                    deal.getId(),
+                    task.getId(),
+                    scheduled,
+                    outcome);
+                if (scheduled != null) {
+                  syncOpportunity(deal);
+                }
+              });
     }
   }
 
@@ -170,16 +204,57 @@ public class FollowUpTaskService {
       Runnable save,
       String relatedType,
       Long relatedId,
-      Long taskId) {
-    writeAttributes.accept(clearedFollowUp(attributes));
+      Long taskId,
+      String scheduled,
+      String outcome) {
+    Map<String, Object> next = clearedFollowUp(attributes);
+    if (scheduled != null) {
+      next = withNextFollowUp(next, scheduled);
+    }
+    writeAttributes.accept(next);
     touch.run();
     save.run();
-    timelineService.recordEvent(
-        relatedType,
-        relatedId,
-        EVENT_FOLLOW_UP_COMPLETED,
-        "Follow-up completed",
-        Map.of("taskId", taskId));
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("taskId", taskId);
+    String summary = "Follow-up completed";
+    if (outcome != null) {
+      payload.put("note", outcome);
+      summary = "Follow-up completed: " + outcome;
+    }
+    timelineService.recordEvent(relatedType, relatedId, EVENT_FOLLOW_UP_COMPLETED, summary, payload);
+  }
+
+  private static String normalizeDate(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    try {
+      return LocalDate.parse(raw.trim()).toString();
+    } catch (DateTimeParseException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Next follow-up date must be YYYY-MM-DD");
+    }
+  }
+
+  private static String normalizeNote(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    String trimmed = raw.trim();
+    return trimmed.length() <= 500 ? trimmed : trimmed.substring(0, 500);
+  }
+
+  private static Map<String, Object> withNextFollowUp(Map<String, Object> attributes, String date) {
+    Map<String, Object> copy = new LinkedHashMap<>(attributes);
+    Map<String, Object> profileCopy = new LinkedHashMap<>();
+    Object profile = copy.get("profile");
+    if (profile instanceof Map<?, ?> raw) {
+      for (Map.Entry<?, ?> entry : raw.entrySet()) {
+        profileCopy.put(String.valueOf(entry.getKey()), entry.getValue());
+      }
+    }
+    profileCopy.put("nextFollowUpDate", date);
+    copy.put("profile", profileCopy);
+    return copy;
   }
 
   /** Last second of the follow-up date in the same zone My Day uses, so the task is due that day. */
