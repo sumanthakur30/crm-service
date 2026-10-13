@@ -2,9 +2,11 @@ package com.shopmanagement.crmservice.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +36,18 @@ import com.shopmanagement.crmservice.support.TenantIds;
 public class OpsService {
 
   private static final Pattern PERIOD_YM = Pattern.compile("^[0-9]{4}-[0-9]{2}$");
+
+  /** ISO-8601 instant. A blank or unparseable time is rejected before a meeting is saved. */
+  static Instant parseMeetingInstant(Object raw) {
+    if (raw == null || String.valueOf(raw).isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting time is required");
+    }
+    try {
+      return Instant.parse(String.valueOf(raw).trim());
+    } catch (DateTimeException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting time must be an instant");
+    }
+  }
 
   private final CrmCalendarEventRepository calendarRepository;
   private final CrmCallLogRepository callLogRepository;
@@ -71,9 +85,12 @@ public class OpsService {
     e.setRelatedType(req(body, "relatedType").toUpperCase(Locale.ROOT));
     e.setRelatedId(asLong(body.get("relatedId")));
     e.setTitle(req(body, "title"));
-    e.setStartsAt(Instant.parse(String.valueOf(body.get("startsAt"))));
-    if (body.get("endsAt") != null) {
-      e.setEndsAt(Instant.parse(String.valueOf(body.get("endsAt"))));
+    Instant startsAt = parseMeetingInstant(body.get("startsAt"));
+    e.setStartsAt(startsAt);
+    if (body.get("endsAt") == null || String.valueOf(body.get("endsAt")).isBlank()) {
+      e.setEndsAt(startsAt.plus(30, ChronoUnit.MINUTES));
+    } else {
+      e.setEndsAt(parseMeetingInstant(body.get("endsAt")));
     }
     e.setOwnerUserId(str(body.get("ownerUserId")));
     e.setLocation(str(body.get("location")));
