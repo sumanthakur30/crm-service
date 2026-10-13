@@ -77,6 +77,9 @@ public class ActivityService {
           calendarRepository
               .findByTenantIdAndStartsAtGreaterThanEqualAndStartsAtLessThanAndDeletedAtIsNullOrderByStartsAtAsc(
                   tenantId, start, end)) {
+        if ("CANCELLED".equalsIgnoreCase(e.getStatus())) {
+          continue;
+        }
         rows.add(
             activity(
                 "MEETING",

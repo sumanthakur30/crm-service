@@ -34,6 +34,19 @@ public class OpsController {
     return opsService.createCalendarEvent(body);
   }
 
+  @PutMapping("/calendar/{id}")
+  public Map<String, Object> rescheduleCalendar(
+      @PathVariable Long id, @RequestBody Map<String, Object> body) {
+    entitlementGuard.requireCrmAccess();
+    return opsService.rescheduleCalendarEvent(id, body.get("startsAt"));
+  }
+
+  @PostMapping("/calendar/{id}/cancel")
+  public Map<String, Object> cancelCalendar(@PathVariable Long id) {
+    entitlementGuard.requireCrmAccess();
+    return opsService.cancelCalendarEvent(id);
+  }
+
   @GetMapping("/calendar")
   public List<Map<String, Object>> listCalendar(@RequestParam(required = false) String from) {
     entitlementGuard.requireCrmAccess();

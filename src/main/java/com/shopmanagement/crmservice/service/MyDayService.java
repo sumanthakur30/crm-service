@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.shopmanagement.crmservice.persistence.entity.CrmCalendarEventEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmTaskEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmCalendarEventRepository;
@@ -83,6 +84,7 @@ public class MyDayService {
             .findByTenantIdAndStartsAtGreaterThanEqualAndStartsAtLessThanAndDeletedAtIsNullOrderByStartsAtAsc(
                 tenantId, dayStart, dayEnd)
             .stream()
+            .filter(MyDayService::openMeeting)
             .map(
                 e -> {
                   Map<String, Object> m = new LinkedHashMap<>();
@@ -200,7 +202,7 @@ public class MyDayService {
       }
       List<Map<String, Object>> dayMeetings = new ArrayList<>();
       for (var event : meetings) {
-        if (date.equals(event.getStartsAt().atZone(ZONE).toLocalDate())) {
+        if (openMeeting(event) && date.equals(event.getStartsAt().atZone(ZONE).toLocalDate())) {
           Map<String, Object> meeting = new LinkedHashMap<>();
           meeting.put("id", event.getId());
           meeting.put("title", event.getTitle());
@@ -227,6 +229,10 @@ public class MyDayService {
     out.put("rangeEnd", rangeEnd.toString());
     out.put("days", days);
     return out;
+  }
+
+  static boolean openMeeting(CrmCalendarEventEntity event) {
+    return event.getStatus() == null || !"CANCELLED".equalsIgnoreCase(event.getStatus());
   }
 
   private static Map<String, Object> toTask(CrmTaskEntity t) {

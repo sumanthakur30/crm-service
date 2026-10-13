@@ -3,6 +3,7 @@ package com.shopmanagement.crmservice.service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DateTimeException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
@@ -108,6 +109,60 @@ public class OpsService {
     return toCal(e);
   }
 
+  @Transactional
+  public Map<String, Object> rescheduleCalendarEvent(Long id, Object startsAtRaw) {
+    Instant startsAt = parseMeetingInstant(startsAtRaw);
+    CrmCalendarEventEntity event = openMeeting(id);
+    Instant previousStart = event.getStartsAt();
+    Instant previousEnd = event.getEndsAt();
+    event.setStartsAt(startsAt);
+    event.setEndsAt(movedEnd(previousStart, previousEnd, startsAt));
+    event.touch();
+    event = calendarRepository.save(event);
+    timelineService.recordEvent(
+        event.getRelatedType(),
+        event.getRelatedId(),
+        "MEETING_MOVED",
+        "Meeting moved: " + event.getTitle(),
+        Map.of("calendarEventId", event.getId(), "startsAt", startsAt.toString()));
+    return toCal(event);
+  }
+
+  @Transactional
+  public Map<String, Object> cancelCalendarEvent(Long id) {
+    CrmCalendarEventEntity event = openMeeting(id);
+    event.setStatus("CANCELLED");
+    event.touch();
+    event = calendarRepository.save(event);
+    timelineService.recordEvent(
+        event.getRelatedType(),
+        event.getRelatedId(),
+        "MEETING_CANCELLED",
+        "Meeting cancelled: " + event.getTitle(),
+        Map.of("calendarEventId", event.getId()));
+    return toCal(event);
+  }
+
+  private CrmCalendarEventEntity openMeeting(Long id) {
+    CrmCalendarEventEntity event =
+        calendarRepository
+            .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));
+    if ("CANCELLED".equalsIgnoreCase(event.getStatus())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting is already cancelled");
+    }
+    return event;
+  }
+
+  /** Keeps the booked length. A meeting with no end stays thirty minutes. */
+  static Instant movedEnd(Instant previousStart, Instant previousEnd, Instant newStart) {
+    Duration length = Duration.ofMinutes(30);
+    if (previousStart != null && previousEnd != null && previousEnd.isAfter(previousStart)) {
+      length = Duration.between(previousStart, previousEnd);
+    }
+    return newStart.plus(length);
+  }
+
   @Transactional(readOnly = true)
   public List<Map<String, Object>> listCalendar(Instant from) {
     Instant start = from == null ? Instant.now().minusSeconds(86400) : from;
@@ -115,6 +170,7 @@ public class OpsService {
         .findByTenantIdAndStartsAtGreaterThanEqualAndDeletedAtIsNullOrderByStartsAtAsc(
             TenantIds.require(), start)
         .stream()
+        .filter(event -> event.getStatus() == null || !"CANCELLED".equalsIgnoreCase(event.getStatus()))
         .map(OpsService::toCal)
         .toList();
   }
