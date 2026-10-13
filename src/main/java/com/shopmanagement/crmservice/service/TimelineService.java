@@ -71,6 +71,12 @@ public class TimelineService {
     return addNote("ACCOUNT", accountId, body, () -> requireAccount(TenantIds.require(), accountId));
   }
 
+  @Transactional
+  public NoteResponse addOpportunityNote(Long opportunityId, NoteRequest body) {
+    return addNote(
+        "OPPORTUNITY", opportunityId, body, () -> requireOpportunity(TenantIds.require(), opportunityId));
+  }
+
   private NoteResponse addNote(String relatedType, Long relatedId, NoteRequest body, Runnable ensureExists) {
     ensureExists.run();
     if (body == null || body.body() == null || body.body().isBlank()) {

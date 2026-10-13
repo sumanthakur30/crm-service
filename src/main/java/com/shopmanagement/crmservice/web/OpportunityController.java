@@ -18,6 +18,8 @@ import java.util.List;
 import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityResponse;
 import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityStageMove;
 import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityUpsert;
+import com.shopmanagement.crmservice.api.CrmLeadApi.NoteRequest;
+import com.shopmanagement.crmservice.api.CrmLeadApi.NoteResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.TimelineItem;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.OpportunityService;
@@ -59,6 +61,13 @@ public class OpportunityController {
   public List<TimelineItem> timeline(@PathVariable Long id) {
     entitlementGuard.requireCrmAccess();
     return timelineService.opportunityTimeline(id);
+  }
+
+  @PostMapping("/{id}/notes")
+  @ResponseStatus(HttpStatus.CREATED)
+  public NoteResponse addNote(@PathVariable Long id, @Valid @RequestBody NoteRequest body) {
+    entitlementGuard.requireCrmAccess();
+    return timelineService.addOpportunityNote(id, body);
   }
 
   @GetMapping("/{id}")
