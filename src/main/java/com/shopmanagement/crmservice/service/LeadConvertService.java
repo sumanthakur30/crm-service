@@ -110,43 +110,51 @@ public class LeadConvertService {
     String url = resolveUrl(target);
     String mode = isSinkUrl(url) ? "SINK" : "LIVE";
     String shopId = resolveShopId(tenantId);
+    String outboundTenantId = outboundTenantId(target, tenantId);
 
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.set("X-Tenant-Id", tenantId);
-    headers.set("X-Shop-Id", shopId);
-    if (properties.getInternalApiKey() != null && !properties.getInternalApiKey().isBlank()) {
-      headers.set("X-Internal-Api-Key", properties.getInternalApiKey().trim());
-    }
-
-    try {
-      ResponseEntity<Map<String, Object>> response =
-          restTemplate.exchange(
-              url,
-              HttpMethod.POST,
-              new HttpEntity<>(request, headers),
-              new ParameterizedTypeReference<Map<String, Object>>() {});
-      Map<String, Object> body = response.getBody() == null ? Map.of() : response.getBody();
-      event.setStatus("SENT");
-      event.setResponseJson(new LinkedHashMap<>(body));
-      Object externalId = body.get("id");
-      if (externalId == null) {
-        externalId = body.get("externalId");
-      }
-      if (externalId != null) {
-        event.setExternalId(String.valueOf(externalId));
-      }
-    } catch (RestClientException ex) {
+    if (outboundTenantId == null) {
       event.setStatus("FAILED");
       event.setErrorMessage(
-          ex.getMessage() == null
-              ? "convert failed"
-              : ex.getMessage().substring(0, Math.min(500, ex.getMessage().length())));
+          "Sign-in has no numeric shop tenant, so the customer was not added. Sign in again, then convert.");
       event.setResponseJson(Map.of("error", event.getErrorMessage()));
-      if (!properties.isFailOpen()) {
-        convertEventRepository.save(event);
-        throw new ResponseStatusException(
-            HttpStatus.BAD_GATEWAY, "ERP convert failed: " + event.getErrorMessage());
+    } else {
+      HttpHeaders headers = new HttpHeaders();
+      headers.setContentType(MediaType.APPLICATION_JSON);
+      headers.set("X-Tenant-Id", outboundTenantId);
+      headers.set("X-Shop-Id", shopId);
+      if (properties.getInternalApiKey() != null && !properties.getInternalApiKey().isBlank()) {
+        headers.set("X-Internal-Api-Key", properties.getInternalApiKey().trim());
+      }
+
+      try {
+        ResponseEntity<Map<String, Object>> response =
+            restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                new HttpEntity<>(request, headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {});
+        Map<String, Object> body = response.getBody() == null ? Map.of() : response.getBody();
+        event.setStatus("SENT");
+        event.setResponseJson(new LinkedHashMap<>(body));
+        Object externalId = body.get("id");
+        if (externalId == null) {
+          externalId = body.get("externalId");
+        }
+        if (externalId != null) {
+          event.setExternalId(String.valueOf(externalId));
+        }
+      } catch (RestClientException ex) {
+        event.setStatus("FAILED");
+        event.setErrorMessage(
+            ex.getMessage() == null
+                ? "convert failed"
+                : ex.getMessage().substring(0, Math.min(500, ex.getMessage().length())));
+        event.setResponseJson(Map.of("error", event.getErrorMessage()));
+        if (!properties.isFailOpen()) {
+          convertEventRepository.save(event);
+          throw new ResponseStatusException(
+              HttpStatus.BAD_GATEWAY, "ERP convert failed: " + event.getErrorMessage());
+        }
       }
     }
 
@@ -214,6 +222,33 @@ public class LeadConvertService {
 
   private static boolean isSinkUrl(String url) {
     return url != null && url.contains("/adapters/erp/");
+  }
+
+  /**
+   * Shop customer rows use a numeric tenant. CRM leads stay keyed by the shop code, so that code
+   * is never sent as {@code X-Tenant-Id} on this call.
+   */
+  private String outboundTenantId(String target, String crmTenantId) {
+    if (!"SHOP_CUSTOMER".equals(target)) {
+      return crmTenantId;
+    }
+    Long fromJwt = TenantContextFilter.getCurrentJwtTenantId();
+    if (fromJwt != null && fromJwt > 0) {
+      return Long.toString(fromJwt);
+    }
+    return positiveLongText(crmTenantId);
+  }
+
+  private static String positiveLongText(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    try {
+      long parsed = Long.parseLong(value.trim());
+      return parsed > 0 ? Long.toString(parsed) : null;
+    } catch (NumberFormatException ex) {
+      return null;
+    }
   }
 
   private String resolveShopId(String tenantId) {

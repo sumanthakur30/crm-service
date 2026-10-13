@@ -31,6 +31,8 @@ public class TenantContextFilter extends OncePerRequestFilter {
   private static final ThreadLocal<String> CURRENT_USER = new ThreadLocal<>();
   private static final ThreadLocal<String> CURRENT_AUTH_ROLE = new ThreadLocal<>();
   private static final ThreadLocal<String> CURRENT_ACCESS_SCOPE = new ThreadLocal<>();
+  /** Numeric tenant from the verified sign-in token. Not used as the CRM row key. */
+  private static final ThreadLocal<Long> CURRENT_JWT_TENANT = new ThreadLocal<>();
 
   @Override
   protected void doFilterInternal(
@@ -69,6 +71,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
         if (scope != null && !scope.isBlank()) {
           CURRENT_ACCESS_SCOPE.set(scope.trim());
         }
+        CURRENT_JWT_TENANT.set(JwtTenantClaim.positiveTenantId(request.getHeader("Authorization")));
       }
       filterChain.doFilter(request, response);
     } finally {
@@ -78,6 +81,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
       CURRENT_USER.remove();
       CURRENT_AUTH_ROLE.remove();
       CURRENT_ACCESS_SCOPE.remove();
+      CURRENT_JWT_TENANT.remove();
     }
   }
 
@@ -101,6 +105,11 @@ public class TenantContextFilter extends OncePerRequestFilter {
     return CURRENT_ACCESS_SCOPE.get();
   }
 
+  /** Numeric tenant from the sign-in token, used only when creating a shop customer. */
+  public static Long getCurrentJwtTenantId() {
+    return CURRENT_JWT_TENANT.get();
+  }
+
   /** Test hook — do not use in production request paths. */
   public static void bindTenantForTests(String tenantId) {
     CURRENT_TENANT.set(tenantId);
@@ -117,12 +126,18 @@ public class TenantContextFilter extends OncePerRequestFilter {
   }
 
   /** Test hook — do not use in production request paths. */
+  public static void bindJwtTenantForTests(Long tenantId) {
+    CURRENT_JWT_TENANT.set(tenantId);
+  }
+
+  /** Test hook — do not use in production request paths. */
   public static void clearTenantForTests() {
     CURRENT_TENANT.remove();
     CURRENT_SHOP.remove();
     CURRENT_USER.remove();
     CURRENT_AUTH_ROLE.remove();
     CURRENT_ACCESS_SCOPE.remove();
+    CURRENT_JWT_TENANT.remove();
   }
 
   private static boolean skipsTenant(String uri) {
