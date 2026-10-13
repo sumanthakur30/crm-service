@@ -13,11 +13,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityResponse;
 import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityStageMove;
 import com.shopmanagement.crmservice.api.CrmDealApi.OpportunityUpsert;
+import com.shopmanagement.crmservice.api.CrmLeadApi.TimelineItem;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.OpportunityService;
+import com.shopmanagement.crmservice.service.TimelineService;
 
 import jakarta.validation.Valid;
 
@@ -26,10 +30,15 @@ import jakarta.validation.Valid;
 public class OpportunityController {
 
   private final OpportunityService opportunityService;
+  private final TimelineService timelineService;
   private final CrmEntitlementGuard entitlementGuard;
 
-  public OpportunityController(OpportunityService opportunityService, CrmEntitlementGuard entitlementGuard) {
+  public OpportunityController(
+      OpportunityService opportunityService,
+      TimelineService timelineService,
+      CrmEntitlementGuard entitlementGuard) {
     this.opportunityService = opportunityService;
+    this.timelineService = timelineService;
     this.entitlementGuard = entitlementGuard;
   }
 
@@ -44,6 +53,12 @@ public class OpportunityController {
   public OpportunityResponse update(@PathVariable Long id, @Valid @RequestBody OpportunityUpsert body) {
     entitlementGuard.requireCrmAccess();
     return opportunityService.update(id, body);
+  }
+
+  @GetMapping("/{id}/timeline")
+  public List<TimelineItem> timeline(@PathVariable Long id) {
+    entitlementGuard.requireCrmAccess();
+    return timelineService.opportunityTimeline(id);
   }
 
   @GetMapping("/{id}")

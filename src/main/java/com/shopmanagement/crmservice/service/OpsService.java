@@ -180,8 +180,19 @@ public class OpsService {
     String tenantId = TenantIds.require();
     CrmCallLogEntity call = new CrmCallLogEntity();
     call.setTenantId(tenantId);
-    Long leadId = body.get("leadId") == null ? null : asLong(body.get("leadId"));
+    Long leadId = optionalLong(body.get("leadId"));
+    Long opportunityId = optionalLong(body.get("opportunityId"));
+    if (leadId == null && opportunityId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A lead or a deal is required");
+    }
+    if (opportunityId != null
+        && opportunityRepository
+            .findByTenantIdAndIdAndDeletedAtIsNull(tenantId, opportunityId)
+            .isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal not found");
+    }
     call.setLeadId(leadId);
+    call.setOpportunityId(opportunityId);
     call.setDirection(
         body.get("direction") == null
             ? "OUTBOUND"
@@ -196,18 +207,28 @@ public class OpsService {
       call.setOccurredAt(Instant.parse(String.valueOf(body.get("occurredAt"))));
     }
     call = callLogRepository.save(call);
+    String summary =
+        "Call " + call.getDirection() + " · " + (call.getOutcome() == null ? "-" : call.getOutcome());
+    Map<String, Object> payload = Map.of("callId", call.getId());
+    if (opportunityId != null) {
+      timelineService.recordEvent("OPPORTUNITY", opportunityId, "CALL_LOGGED", summary, payload);
+    }
     if (leadId != null) {
-      timelineService.recordEvent(
-          "LEAD",
-          leadId,
-          "CALL_LOGGED",
-          "Call " + call.getDirection() + " · " + (call.getOutcome() == null ? "-" : call.getOutcome()),
-          Map.of("callId", call.getId()));
+      timelineService.recordEvent("LEAD", leadId, "CALL_LOGGED", summary, payload);
       if ("CONNECTED".equalsIgnoreCase(call.getOutcome()) || call.getDurationSec() > 0) {
-        scoringService.applyEvent(leadId, "CALL_CONNECTED", "Call connected", Map.of("callId", call.getId()));
+        scoringService.applyEvent(leadId, "CALL_CONNECTED", "Call connected", payload);
       }
     }
     return toCall(call);
+  }
+
+  /** A deal call shows on the deal. A lead-only call stays on the lead. */
+  static String callActivityType(Long leadId, Long opportunityId) {
+    return opportunityId != null ? "OPPORTUNITY" : "LEAD";
+  }
+
+  static Long callActivityId(Long leadId, Long opportunityId) {
+    return opportunityId != null ? opportunityId : leadId;
   }
 
   @Transactional(readOnly = true)
@@ -395,6 +416,7 @@ public class OpsService {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("id", c.getId());
     m.put("leadId", c.getLeadId());
+    m.put("opportunityId", c.getOpportunityId());
     m.put("direction", c.getDirection());
     m.put("phone", c.getPhone());
     m.put("durationSec", c.getDurationSec());
@@ -427,6 +449,16 @@ public class OpsService {
 
   private static String str(Object v) {
     return v == null || String.valueOf(v).isBlank() ? null : String.valueOf(v).trim();
+  }
+
+  private static Long optionalLong(Object v) {
+    if (v == null || String.valueOf(v).isBlank()) {
+      return null;
+    }
+    if (v instanceof Number number) {
+      return number.longValue();
+    }
+    return Long.valueOf(String.valueOf(v).trim());
   }
 
   private static Long asLong(Object v) {

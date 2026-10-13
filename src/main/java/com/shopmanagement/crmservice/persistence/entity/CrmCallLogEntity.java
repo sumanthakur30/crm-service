@@ -27,6 +27,9 @@ public class CrmCallLogEntity {
   @Column(name = "lead_id")
   private Long leadId;
 
+  @Column(name = "opportunity_id")
+  private Long opportunityId;
+
   @Column(nullable = false, length = 16)
   private String direction = "OUTBOUND";
 

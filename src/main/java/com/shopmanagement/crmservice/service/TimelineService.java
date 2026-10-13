@@ -20,6 +20,7 @@ import com.shopmanagement.crmservice.persistence.entity.CrmTimelineEventEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmAccountRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmNoteRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmOpportunityRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmTimelineEventRepository;
 import com.shopmanagement.crmservice.support.TenantIds;
 
@@ -30,16 +31,19 @@ public class TimelineService {
   private final CrmTimelineEventRepository timelineRepository;
   private final CrmLeadRepository leadRepository;
   private final CrmAccountRepository accountRepository;
+  private final CrmOpportunityRepository opportunityRepository;
 
   public TimelineService(
       CrmNoteRepository noteRepository,
       CrmTimelineEventRepository timelineRepository,
       CrmLeadRepository leadRepository,
-      CrmAccountRepository accountRepository) {
+      CrmAccountRepository accountRepository,
+      CrmOpportunityRepository opportunityRepository) {
     this.noteRepository = noteRepository;
     this.timelineRepository = timelineRepository;
     this.leadRepository = leadRepository;
     this.accountRepository = accountRepository;
+    this.opportunityRepository = opportunityRepository;
   }
 
   @Transactional
@@ -100,6 +104,12 @@ public class TimelineService {
     return timelineFor("ACCOUNT", accountId);
   }
 
+  @Transactional(readOnly = true)
+  public List<TimelineItem> opportunityTimeline(Long opportunityId) {
+    requireOpportunity(TenantIds.require(), opportunityId);
+    return timelineFor("OPPORTUNITY", opportunityId);
+  }
+
   private List<TimelineItem> timelineFor(String relatedType, Long relatedId) {
     String tenantId = TenantIds.require();
     List<TimelineItem> items = new ArrayList<>();
@@ -137,6 +147,12 @@ public class TimelineService {
     leadRepository
         .findByTenantIdAndIdAndDeletedAtIsNull(tenantId, leadId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+  }
+
+  private void requireOpportunity(String tenantId, Long opportunityId) {
+    opportunityRepository
+        .findByTenantIdAndIdAndDeletedAtIsNull(tenantId, opportunityId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal not found"));
   }
 
   private void requireAccount(String tenantId, Long accountId) {
