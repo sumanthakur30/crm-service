@@ -140,13 +140,47 @@ public class MyDayService {
   /** Monday–Sunday week in {@link #ZONE}. Tasks and meetings are grouped by that local date. */
   @Transactional(readOnly = true)
   public Map<String, Object> week(LocalDate weekOf) {
-    String tenantId = TenantIds.require();
-    LocalDate anchor = weekOf == null ? LocalDate.now(ZONE) : weekOf;
-    LocalDate weekStart = anchor.with(DayOfWeek.MONDAY);
-    LocalDate weekEnd = weekStart.plusDays(7);
-    Instant from = weekStart.atStartOfDay(ZONE).toInstant();
-    Instant to = weekEnd.atStartOfDay(ZONE).toInstant();
+    Map<String, Object> calendar = calendar("week", weekOf);
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("timezone", calendar.get("timezone"));
+    out.put("weekStart", calendar.get("rangeStart"));
+    out.put("weekEnd", calendar.get("rangeEnd"));
+    out.put("days", calendar.get("days"));
+    return out;
+  }
 
+  /**
+   * Day, week, or month of open tasks and meetings. A month grid starts on Monday and may include
+   * days from the neighbouring months so the columns stay aligned.
+   */
+  @Transactional(readOnly = true)
+  public Map<String, Object> calendar(String view, LocalDate anchorDate) {
+    String tenantId = TenantIds.require();
+    LocalDate anchor = anchorDate == null ? LocalDate.now(ZONE) : anchorDate;
+    String mode = view == null ? "week" : view.trim().toLowerCase(java.util.Locale.ROOT);
+    LocalDate rangeStart;
+    LocalDate rangeEnd;
+    LocalDate gridStart;
+    LocalDate gridEnd;
+    if ("day".equals(mode)) {
+      rangeStart = anchor;
+      rangeEnd = anchor;
+      gridStart = anchor;
+      gridEnd = anchor;
+    } else if ("month".equals(mode)) {
+      rangeStart = anchor.withDayOfMonth(1);
+      rangeEnd = rangeStart.plusMonths(1).minusDays(1);
+      gridStart = rangeStart.with(DayOfWeek.MONDAY);
+      gridEnd = rangeEnd.with(DayOfWeek.SUNDAY);
+    } else {
+      mode = "week";
+      rangeStart = anchor.with(DayOfWeek.MONDAY);
+      rangeEnd = rangeStart.plusDays(6);
+      gridStart = rangeStart;
+      gridEnd = rangeEnd;
+    }
+    Instant from = gridStart.atStartOfDay(ZONE).toInstant();
+    Instant to = gridEnd.plusDays(1).atStartOfDay(ZONE).toInstant();
     List<CrmTaskEntity> tasks =
         taskRepository
             .findByTenantIdAndStatusAndDueAtGreaterThanEqualAndDueAtLessThanAndDeletedAtIsNullOrderByDueAtAsc(
@@ -157,8 +191,7 @@ public class MyDayService {
                 tenantId, from, to);
 
     List<Map<String, Object>> days = new ArrayList<>();
-    for (int i = 0; i < 7; i++) {
-      LocalDate date = weekStart.plusDays(i);
+    for (LocalDate date = gridStart; !date.isAfter(gridEnd); date = date.plusDays(1)) {
       List<Map<String, Object>> dayTasks = new ArrayList<>();
       for (CrmTaskEntity task : tasks) {
         if (task.getDueAt() != null && date.equals(task.getDueAt().atZone(ZONE).toLocalDate())) {
@@ -168,18 +201,20 @@ public class MyDayService {
       List<Map<String, Object>> dayMeetings = new ArrayList<>();
       for (var event : meetings) {
         if (date.equals(event.getStartsAt().atZone(ZONE).toLocalDate())) {
-          Map<String, Object> m = new LinkedHashMap<>();
-          m.put("id", event.getId());
-          m.put("title", event.getTitle());
-          m.put("startsAt", event.getStartsAt());
-          m.put("endsAt", event.getEndsAt());
-          m.put("relatedType", event.getRelatedType());
-          m.put("relatedId", event.getRelatedId());
-          dayMeetings.add(m);
+          Map<String, Object> meeting = new LinkedHashMap<>();
+          meeting.put("id", event.getId());
+          meeting.put("title", event.getTitle());
+          meeting.put("startsAt", event.getStartsAt());
+          meeting.put("endsAt", event.getEndsAt());
+          meeting.put("relatedType", event.getRelatedType());
+          meeting.put("relatedId", event.getRelatedId());
+          dayMeetings.add(meeting);
         }
       }
+      boolean inRange = !date.isBefore(rangeStart) && !date.isAfter(rangeEnd);
       Map<String, Object> day = new LinkedHashMap<>();
       day.put("date", date.toString());
+      day.put("inRange", inRange);
       day.put("tasks", dayTasks);
       day.put("meetings", dayMeetings);
       days.add(day);
@@ -187,8 +222,9 @@ public class MyDayService {
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("timezone", ZONE.getId());
-    out.put("weekStart", weekStart.toString());
-    out.put("weekEnd", weekStart.plusDays(6).toString());
+    out.put("view", mode);
+    out.put("rangeStart", rangeStart.toString());
+    out.put("rangeEnd", rangeEnd.toString());
     out.put("days", days);
     return out;
   }

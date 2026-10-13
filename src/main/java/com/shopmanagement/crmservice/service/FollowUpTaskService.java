@@ -10,17 +10,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmTaskEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmTaskRepository;
 
 /**
- * Keeps one open follow-up task per lead. A later save moves that task; it does not add another.
+ * Keeps one open follow-up task per lead or deal. A later save moves that task; it does not add another.
  */
 @Service
 public class FollowUpTaskService {
 
   public static final String SOURCE_LEAD_FOLLOW_UP = "LEAD_FOLLOW_UP";
+  public static final String SOURCE_OPPORTUNITY_FOLLOW_UP = "OPPORTUNITY_FOLLOW_UP";
   static final String RELATED_LEAD = "LEAD";
+  static final String RELATED_OPPORTUNITY = "OPPORTUNITY";
 
   private final CrmTaskRepository taskRepository;
 
@@ -33,11 +36,47 @@ public class FollowUpTaskService {
     if (lead == null || lead.getId() == null) {
       return;
     }
-    String raw = readNextFollowUp(lead.getAttributes());
+    sync(
+        lead.getTenantId(),
+        RELATED_LEAD,
+        lead.getId(),
+        SOURCE_LEAD_FOLLOW_UP,
+        followUpTitle(lead.getTitle(), "lead"),
+        taskPriority(lead.getPriority()),
+        lead.getOwnerUserId(),
+        lead.getAttributes());
+  }
+
+  @Transactional
+  public void syncOpportunity(CrmOpportunityEntity opportunity) {
+    if (opportunity == null || opportunity.getId() == null) {
+      return;
+    }
+    sync(
+        opportunity.getTenantId(),
+        RELATED_OPPORTUNITY,
+        opportunity.getId(),
+        SOURCE_OPPORTUNITY_FOLLOW_UP,
+        followUpTitle(opportunity.getName(), "deal"),
+        "MEDIUM",
+        opportunity.getOwnerUserId(),
+        opportunity.getAttributes());
+  }
+
+  private void sync(
+      String tenantId,
+      String relatedType,
+      Long relatedId,
+      String sourceCode,
+      String title,
+      String priority,
+      String ownerUserId,
+      Map<String, Object> attributes) {
     List<CrmTaskEntity> open =
         taskRepository
             .findByTenantIdAndRelatedTypeAndRelatedIdAndSourceCodeAndStatusAndDeletedAtIsNullOrderByIdAsc(
-                lead.getTenantId(), RELATED_LEAD, lead.getId(), SOURCE_LEAD_FOLLOW_UP, "OPEN");
+                tenantId, relatedType, relatedId, sourceCode, "OPEN");
+    String raw = readNextFollowUp(attributes);
     if (raw == null) {
       cancelAll(open);
       return;
@@ -49,19 +88,17 @@ public class FollowUpTaskService {
       return;
     }
     Instant dueAt = dueAtEndOfDay(date);
-    String title = followUpTitle(lead.getTitle());
-    String priority = taskPriority(lead.getPriority());
     if (open.isEmpty()) {
       CrmTaskEntity task = new CrmTaskEntity();
-      task.setTenantId(lead.getTenantId());
-      task.setRelatedType(RELATED_LEAD);
-      task.setRelatedId(lead.getId());
-      task.setSourceCode(SOURCE_LEAD_FOLLOW_UP);
+      task.setTenantId(tenantId);
+      task.setRelatedType(relatedType);
+      task.setRelatedId(relatedId);
+      task.setSourceCode(sourceCode);
       task.setStatus("OPEN");
       task.setDueAt(dueAt);
       task.setTitle(title);
       task.setPriority(priority);
-      task.setOwnerUserId(lead.getOwnerUserId());
+      task.setOwnerUserId(ownerUserId);
       taskRepository.save(task);
       return;
     }
@@ -69,11 +106,11 @@ public class FollowUpTaskService {
     if (!dueAt.equals(keep.getDueAt())
         || !title.equals(keep.getTitle())
         || !priority.equals(keep.getPriority())
-        || !sameOwner(keep.getOwnerUserId(), lead.getOwnerUserId())) {
+        || !sameOwner(keep.getOwnerUserId(), ownerUserId)) {
       keep.setDueAt(dueAt);
       keep.setTitle(title);
       keep.setPriority(priority);
-      keep.setOwnerUserId(lead.getOwnerUserId());
+      keep.setOwnerUserId(ownerUserId);
       keep.touch();
       taskRepository.save(keep);
     }
@@ -101,8 +138,8 @@ public class FollowUpTaskService {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private static String followUpTitle(String leadTitle) {
-    String name = leadTitle == null || leadTitle.isBlank() ? "lead" : leadTitle.trim();
+  private static String followUpTitle(String recordTitle, String fallback) {
+    String name = recordTitle == null || recordTitle.isBlank() ? fallback : recordTitle.trim();
     String title = "Follow up: " + name;
     return title.length() <= 256 ? title : title.substring(0, 256);
   }

@@ -45,6 +45,7 @@ public class OpportunityService {
   private final TimelineService timelineService;
   private final StageAutomationService stageAutomationService;
   private final CrmRecordScopeService recordScopeService;
+  private final FollowUpTaskService followUpTaskService;
 
   public OpportunityService(
       CrmOpportunityRepository opportunityRepository,
@@ -56,7 +57,8 @@ public class OpportunityService {
       WorkspaceBootstrapService workspaceBootstrapService,
       TimelineService timelineService,
       StageAutomationService stageAutomationService,
-      CrmRecordScopeService recordScopeService) {
+      CrmRecordScopeService recordScopeService,
+      FollowUpTaskService followUpTaskService) {
     this.opportunityRepository = opportunityRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
@@ -67,6 +69,7 @@ public class OpportunityService {
     this.timelineService = timelineService;
     this.stageAutomationService = stageAutomationService;
     this.recordScopeService = recordScopeService;
+    this.followUpTaskService = followUpTaskService;
   }
 
   @Transactional
@@ -89,6 +92,7 @@ public class OpportunityService {
       opp.setOwnerUserId(TenantIds.currentUserOrNull());
     }
     opp = opportunityRepository.save(opp);
+    followUpTaskService.syncOpportunity(opp);
     timelineService.recordEvent(
         "OPPORTUNITY",
         opp.getId(),
@@ -122,7 +126,9 @@ public class OpportunityService {
     }
     apply(opp, body, pipeline.getId(), stage, lead, false);
     opp.touch();
-    return toResponse(opportunityRepository.save(opp));
+    opp = opportunityRepository.save(opp);
+    followUpTaskService.syncOpportunity(opp);
+    return toResponse(opp);
   }
 
   @Transactional

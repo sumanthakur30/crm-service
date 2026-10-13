@@ -47,6 +47,14 @@ public class MyDayController {
     return myDayService.week(weekOf);
   }
 
+  @GetMapping("/my-day/calendar")
+  public Map<String, Object> calendar(
+      @RequestParam(required = false, defaultValue = "week") String view,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate anchor) {
+    entitlementGuard.requireCrmAccess();
+    return myDayService.calendar(view, anchor);
+  }
+
   @GetMapping("/activities")
   public List<Map<String, Object>> activities(
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,

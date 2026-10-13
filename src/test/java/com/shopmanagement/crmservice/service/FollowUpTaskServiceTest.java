@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmTaskEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmTaskRepository;
 
@@ -123,6 +124,91 @@ class FollowUpTaskServiceTest {
     assertThat(extra.getStatus()).isEqualTo("CANCELLED");
     verify(taskRepository).save(extra);
     verify(taskRepository, never()).save(keep);
+  }
+
+  @Test
+  void createsOneOpenTaskForADealFollowUp() {
+    CrmOpportunityEntity deal = new CrmOpportunityEntity();
+    deal.setId(8L);
+    deal.setTenantId("tenant-demo");
+    deal.setName("Acme order");
+    deal.setOwnerUserId("user-2");
+    deal.setAttributes(Map.of("profile", Map.of("nextFollowUpDate", "2026-10-21")));
+    when(taskRepository
+            .findByTenantIdAndRelatedTypeAndRelatedIdAndSourceCodeAndStatusAndDeletedAtIsNullOrderByIdAsc(
+                "tenant-demo",
+                "OPPORTUNITY",
+                8L,
+                FollowUpTaskService.SOURCE_OPPORTUNITY_FOLLOW_UP,
+                "OPEN"))
+        .thenReturn(List.of());
+
+    service.syncOpportunity(deal);
+
+    ArgumentCaptor<CrmTaskEntity> captor = ArgumentCaptor.forClass(CrmTaskEntity.class);
+    verify(taskRepository).save(captor.capture());
+    CrmTaskEntity saved = captor.getValue();
+    assertThat(saved.getRelatedType()).isEqualTo("OPPORTUNITY");
+    assertThat(saved.getRelatedId()).isEqualTo(8L);
+    assertThat(saved.getSourceCode()).isEqualTo("OPPORTUNITY_FOLLOW_UP");
+    assertThat(saved.getTitle()).isEqualTo("Follow up: Acme order");
+    assertThat(saved.getDueAt()).isEqualTo(FollowUpTaskService.dueAtEndOfDay(LocalDate.parse("2026-10-21")));
+  }
+
+  @Test
+  void secondDealSaveMovesTheSameTask() {
+    CrmOpportunityEntity deal = new CrmOpportunityEntity();
+    deal.setId(8L);
+    deal.setTenantId("tenant-demo");
+    deal.setName("Acme order");
+    deal.setOwnerUserId("user-2");
+    deal.setAttributes(Map.of("profile", Map.of("nextFollowUpDate", "2026-10-23")));
+    CrmTaskEntity existing = openTask();
+    existing.setRelatedType("OPPORTUNITY");
+    existing.setRelatedId(8L);
+    existing.setSourceCode(FollowUpTaskService.SOURCE_OPPORTUNITY_FOLLOW_UP);
+    existing.setDueAt(FollowUpTaskService.dueAtEndOfDay(LocalDate.parse("2026-10-21")));
+    when(taskRepository
+            .findByTenantIdAndRelatedTypeAndRelatedIdAndSourceCodeAndStatusAndDeletedAtIsNullOrderByIdAsc(
+                "tenant-demo",
+                "OPPORTUNITY",
+                8L,
+                FollowUpTaskService.SOURCE_OPPORTUNITY_FOLLOW_UP,
+                "OPEN"))
+        .thenReturn(List.of(existing));
+
+    service.syncOpportunity(deal);
+
+    assertThat(existing.getId()).isEqualTo(4L);
+    assertThat(existing.getStatus()).isEqualTo("OPEN");
+    assertThat(existing.getDueAt()).isEqualTo(FollowUpTaskService.dueAtEndOfDay(LocalDate.parse("2026-10-23")));
+    verify(taskRepository).save(existing);
+  }
+
+  @Test
+  void clearingADealFollowUpCancelsTheOpenTask() {
+    CrmOpportunityEntity deal = new CrmOpportunityEntity();
+    deal.setId(8L);
+    deal.setTenantId("tenant-demo");
+    deal.setName("Acme order");
+    deal.setAttributes(new LinkedHashMap<>());
+    CrmTaskEntity existing = openTask();
+    existing.setRelatedType("OPPORTUNITY");
+    existing.setRelatedId(8L);
+    existing.setSourceCode(FollowUpTaskService.SOURCE_OPPORTUNITY_FOLLOW_UP);
+    when(taskRepository
+            .findByTenantIdAndRelatedTypeAndRelatedIdAndSourceCodeAndStatusAndDeletedAtIsNullOrderByIdAsc(
+                "tenant-demo",
+                "OPPORTUNITY",
+                8L,
+                FollowUpTaskService.SOURCE_OPPORTUNITY_FOLLOW_UP,
+                "OPEN"))
+        .thenReturn(new ArrayList<>(List.of(existing)));
+
+    service.syncOpportunity(deal);
+
+    assertThat(existing.getStatus()).isEqualTo("CANCELLED");
+    verify(taskRepository).save(existing);
   }
 
   @Test

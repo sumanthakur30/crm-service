@@ -84,6 +84,62 @@ class MyDayServiceWeekTest {
     assertThat(tasksOn(days, "2026-10-19")).isEmpty();
   }
 
+  @Test
+  void dayViewReturnsOnlyThatDate() {
+    when(taskRepository
+            .findByTenantIdAndStatusAndDueAtGreaterThanEqualAndDueAtLessThanAndDeletedAtIsNullOrderByDueAtAsc(
+                eq("tenant-demo"), eq("OPEN"), any(), any()))
+        .thenReturn(List.of(followUpOn("2026-10-20")));
+    when(calendarRepository
+            .findByTenantIdAndStartsAtGreaterThanEqualAndStartsAtLessThanAndDeletedAtIsNullOrderByStartsAtAsc(
+                eq("tenant-demo"), any(), any()))
+        .thenReturn(List.of());
+
+    Map<String, Object> day = myDayService.calendar("day", LocalDate.parse("2026-10-20"));
+
+    assertThat(day.get("view")).isEqualTo("day");
+    assertThat(day.get("rangeStart")).isEqualTo("2026-10-20");
+    assertThat(day.get("rangeEnd")).isEqualTo("2026-10-20");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> days = (List<Map<String, Object>>) day.get("days");
+    assertThat(days).hasSize(1);
+    assertThat(tasksOn(days, "2026-10-20")).containsExactly("Follow up: Acme inquiry");
+  }
+
+  @Test
+  void monthViewKeepsTheFollowUpInsideOctober() {
+    when(taskRepository
+            .findByTenantIdAndStatusAndDueAtGreaterThanEqualAndDueAtLessThanAndDeletedAtIsNullOrderByDueAtAsc(
+                eq("tenant-demo"), eq("OPEN"), any(), any()))
+        .thenReturn(List.of(followUpOn("2026-10-20")));
+    when(calendarRepository
+            .findByTenantIdAndStartsAtGreaterThanEqualAndStartsAtLessThanAndDeletedAtIsNullOrderByStartsAtAsc(
+                eq("tenant-demo"), any(), any()))
+        .thenReturn(List.of());
+
+    Map<String, Object> month = myDayService.calendar("month", LocalDate.parse("2026-10-21"));
+
+    assertThat(month.get("view")).isEqualTo("month");
+    assertThat(month.get("rangeStart")).isEqualTo("2026-10-01");
+    assertThat(month.get("rangeEnd")).isEqualTo("2026-10-31");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> days = (List<Map<String, Object>>) month.get("days");
+    assertThat(tasksOn(days, "2026-10-20")).containsExactly("Follow up: Acme inquiry");
+    assertThat(days.get(0).get("date")).isEqualTo("2026-09-28");
+    assertThat(days.get(0).get("inRange")).isEqualTo(false);
+  }
+
+  private static CrmTaskEntity followUpOn(String date) {
+    CrmTaskEntity task = new CrmTaskEntity();
+    task.setId(4L);
+    task.setTitle("Follow up: Acme inquiry");
+    task.setRelatedType("LEAD");
+    task.setRelatedId(7L);
+    task.setStatus("OPEN");
+    task.setDueAt(FollowUpTaskService.dueAtEndOfDay(LocalDate.parse(date)));
+    return task;
+  }
+
   @SuppressWarnings("unchecked")
   private static List<String> tasksOn(List<Map<String, Object>> days, String date) {
     return days.stream()
