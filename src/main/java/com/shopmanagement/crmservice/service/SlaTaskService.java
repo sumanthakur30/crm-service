@@ -29,18 +29,21 @@ public class SlaTaskService {
   private final CrmLeadRepository leadRepository;
   private final CrmOpportunityRepository opportunityRepository;
   private final TimelineService timelineService;
+  private final FollowUpTaskService followUpTaskService;
 
   public SlaTaskService(
       CrmSlaPolicyRepository slaPolicyRepository,
       CrmTaskRepository taskRepository,
       CrmLeadRepository leadRepository,
       CrmOpportunityRepository opportunityRepository,
-      TimelineService timelineService) {
+      TimelineService timelineService,
+      FollowUpTaskService followUpTaskService) {
     this.slaPolicyRepository = slaPolicyRepository;
     this.taskRepository = taskRepository;
     this.leadRepository = leadRepository;
     this.opportunityRepository = opportunityRepository;
     this.timelineService = timelineService;
+    this.followUpTaskService = followUpTaskService;
   }
 
   @Transactional
@@ -87,7 +90,9 @@ public class SlaTaskService {
     task.setStatus("DONE");
     task.setCompletedAt(Instant.now());
     task.touch();
-    return toTask(taskRepository.save(task));
+    CrmTaskEntity saved = taskRepository.save(task);
+    followUpTaskService.completeFollowUp(saved);
+    return toTask(saved);
   }
 
   @Transactional

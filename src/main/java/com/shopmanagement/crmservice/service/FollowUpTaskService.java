@@ -3,6 +3,7 @@ package com.shopmanagement.crmservice.service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -12,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmTaskEntity;
+import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmOpportunityRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmTaskRepository;
 
 /**
@@ -24,11 +27,22 @@ public class FollowUpTaskService {
   public static final String SOURCE_OPPORTUNITY_FOLLOW_UP = "OPPORTUNITY_FOLLOW_UP";
   static final String RELATED_LEAD = "LEAD";
   static final String RELATED_OPPORTUNITY = "OPPORTUNITY";
+  static final String EVENT_FOLLOW_UP_COMPLETED = "FOLLOW_UP_COMPLETED";
 
   private final CrmTaskRepository taskRepository;
+  private final CrmLeadRepository leadRepository;
+  private final CrmOpportunityRepository opportunityRepository;
+  private final TimelineService timelineService;
 
-  public FollowUpTaskService(CrmTaskRepository taskRepository) {
+  public FollowUpTaskService(
+      CrmTaskRepository taskRepository,
+      CrmLeadRepository leadRepository,
+      CrmOpportunityRepository opportunityRepository,
+      TimelineService timelineService) {
     this.taskRepository = taskRepository;
+    this.leadRepository = leadRepository;
+    this.opportunityRepository = opportunityRepository;
+    this.timelineService = timelineService;
   }
 
   @Transactional
@@ -117,9 +131,79 @@ public class FollowUpTaskService {
     cancelAll(open.subList(1, open.size()));
   }
 
+  /**
+   * A completed lead or deal follow-up drops the saved next date so a later save does not open the
+   * same task again. Qualification and the other profile fields stay. The completed day is stored
+   * beside the profile so a later profile edit does not erase it.
+   */
+  @Transactional
+  public void completeFollowUp(CrmTaskEntity task) {
+    if (task == null || task.getRelatedId() == null || task.getTenantId() == null) {
+      return;
+    }
+    if (SOURCE_LEAD_FOLLOW_UP.equals(task.getSourceCode())) {
+      leadRepository
+          .findByTenantIdAndIdAndDeletedAtIsNull(task.getTenantId(), task.getRelatedId())
+          .ifPresent(lead -> finish(lead.getAttributes(), lead::setAttributes, lead::touch, () -> leadRepository.save(lead), RELATED_LEAD, lead.getId(), task.getId()));
+      return;
+    }
+    if (SOURCE_OPPORTUNITY_FOLLOW_UP.equals(task.getSourceCode())) {
+      opportunityRepository
+          .findByTenantIdAndIdAndDeletedAtIsNull(task.getTenantId(), task.getRelatedId())
+          .ifPresent(
+              deal ->
+                  finish(
+                      deal.getAttributes(),
+                      deal::setAttributes,
+                      deal::touch,
+                      () -> opportunityRepository.save(deal),
+                      RELATED_OPPORTUNITY,
+                      deal.getId(),
+                      task.getId()));
+    }
+  }
+
+  private void finish(
+      Map<String, Object> attributes,
+      java.util.function.Consumer<Map<String, Object>> writeAttributes,
+      Runnable touch,
+      Runnable save,
+      String relatedType,
+      Long relatedId,
+      Long taskId) {
+    writeAttributes.accept(clearedFollowUp(attributes));
+    touch.run();
+    save.run();
+    timelineService.recordEvent(
+        relatedType,
+        relatedId,
+        EVENT_FOLLOW_UP_COMPLETED,
+        "Follow-up completed",
+        Map.of("taskId", taskId));
+  }
+
   /** Last second of the follow-up date in the same zone My Day uses, so the task is due that day. */
   static Instant dueAtEndOfDay(LocalDate date) {
     return date.plusDays(1).atStartOfDay(MyDayService.ZONE).toInstant().minusSeconds(1);
+  }
+
+  static Map<String, Object> clearedFollowUp(Map<String, Object> attributes) {
+    Map<String, Object> copy = new LinkedHashMap<>();
+    if (attributes != null) {
+      copy.putAll(attributes);
+    }
+    Object profile = copy.get("profile");
+    if (profile instanceof Map<?, ?> raw) {
+      Map<String, Object> profileCopy = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : raw.entrySet()) {
+        if (!"nextFollowUpDate".equals(String.valueOf(entry.getKey()))) {
+          profileCopy.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+      }
+      copy.put("profile", profileCopy);
+    }
+    copy.put("lastFollowUpOn", LocalDate.now(MyDayService.ZONE).toString());
+    return copy;
   }
 
   private static String readNextFollowUp(Map<String, Object> attributes) {

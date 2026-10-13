@@ -2,8 +2,10 @@ package com.shopmanagement.crmservice.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -12,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,12 +26,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmOpportunityEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmTaskEntity;
+import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmOpportunityRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmTaskRepository;
 
 @ExtendWith(MockitoExtension.class)
 class FollowUpTaskServiceTest {
 
   @Mock private CrmTaskRepository taskRepository;
+  @Mock private CrmLeadRepository leadRepository;
+  @Mock private CrmOpportunityRepository opportunityRepository;
+  @Mock private TimelineService timelineService;
   @InjectMocks private FollowUpTaskService service;
 
   @Test
@@ -209,6 +217,70 @@ class FollowUpTaskServiceTest {
 
     assertThat(existing.getStatus()).isEqualTo("CANCELLED");
     verify(taskRepository).save(existing);
+  }
+
+  @Test
+  void completingALeadFollowUpClearsTheDateAndKeepsTheOtherProfile() {
+    CrmLeadEntity lead = new CrmLeadEntity();
+    lead.setId(7L);
+    lead.setTenantId("tenant-demo");
+    Map<String, Object> profile = new LinkedHashMap<>();
+    profile.put("nextFollowUpDate", "2026-10-20");
+    profile.put("designation", "Buyer");
+    Map<String, Object> attributes = new LinkedHashMap<>();
+    attributes.put("profile", profile);
+    attributes.put("qualification", Map.of("budget", "yes"));
+    lead.setAttributes(attributes);
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("tenant-demo", 7L)).thenReturn(Optional.of(lead));
+    CrmTaskEntity task = openTask();
+    task.setSourceCode(FollowUpTaskService.SOURCE_LEAD_FOLLOW_UP);
+
+    service.completeFollowUp(task);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> savedProfile = (Map<String, Object>) lead.getAttributes().get("profile");
+    assertThat(savedProfile).doesNotContainKey("nextFollowUpDate");
+    assertThat(savedProfile).containsEntry("designation", "Buyer");
+    assertThat(lead.getAttributes()).containsEntry("qualification", Map.of("budget", "yes"));
+    assertThat(lead.getAttributes().get("lastFollowUpOn")).isEqualTo(LocalDate.now(MyDayService.ZONE).toString());
+    verify(leadRepository).save(lead);
+    verify(timelineService)
+        .recordEvent(eq("LEAD"), eq(7L), eq("FOLLOW_UP_COMPLETED"), eq("Follow-up completed"), eq(Map.of("taskId", 4L)));
+    verifyNoInteractions(opportunityRepository);
+  }
+
+  @Test
+  void completingADealFollowUpClearsOnlyThatDate() {
+    CrmOpportunityEntity deal = new CrmOpportunityEntity();
+    deal.setId(8L);
+    deal.setTenantId("tenant-demo");
+    deal.setAttributes(new LinkedHashMap<>(Map.of("profile", Map.of("nextFollowUpDate", "2026-10-23", "industry", "Retail"))));
+    when(opportunityRepository.findByTenantIdAndIdAndDeletedAtIsNull("tenant-demo", 8L)).thenReturn(Optional.of(deal));
+    CrmTaskEntity task = openTask();
+    task.setRelatedType("OPPORTUNITY");
+    task.setRelatedId(8L);
+    task.setSourceCode(FollowUpTaskService.SOURCE_OPPORTUNITY_FOLLOW_UP);
+
+    service.completeFollowUp(task);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> savedProfile = (Map<String, Object>) deal.getAttributes().get("profile");
+    assertThat(savedProfile).containsEntry("industry", "Retail");
+    assertThat(savedProfile).doesNotContainKey("nextFollowUpDate");
+    verify(opportunityRepository).save(deal);
+    verify(timelineService)
+        .recordEvent(
+            eq("OPPORTUNITY"), eq(8L), eq("FOLLOW_UP_COMPLETED"), eq("Follow-up completed"), eq(Map.of("taskId", 4L)));
+  }
+
+  @Test
+  void completingAnSlaTaskDoesNotChangeTheFollowUpDate() {
+    CrmTaskEntity task = openTask();
+    task.setSourceCode("SLA");
+
+    service.completeFollowUp(task);
+
+    verifyNoInteractions(leadRepository, opportunityRepository, timelineService);
   }
 
   @Test
