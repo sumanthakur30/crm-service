@@ -64,7 +64,7 @@ public class CrmWorkspaceController {
         "crm-service",
         "5-pilot",
         crmProperties.isEnabled(),
-        convertProperties.isEnabled(),
+        entitlementGuard.convertAllowed(convertProperties.isEnabled()),
         ctiProperties.isEnabled(),
         inboundProperties.isSigningEnabled(),
         INBOUND_SIGNATURE_FORMATS,

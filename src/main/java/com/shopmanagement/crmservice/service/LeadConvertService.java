@@ -20,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.config.CrmConvertProperties;
+import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.persistence.entity.CrmConvertEventEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
@@ -35,6 +36,7 @@ public class LeadConvertService {
   private final CrmLeadRepository leadRepository;
   private final CrmConvertEventRepository convertEventRepository;
   private final CrmConvertProperties properties;
+  private final CrmEntitlementGuard entitlementGuard;
   private final RestTemplate restTemplate;
   private final TimelineService timelineService;
   private final ErpFederationService erpFederationService;
@@ -43,12 +45,14 @@ public class LeadConvertService {
       CrmLeadRepository leadRepository,
       CrmConvertEventRepository convertEventRepository,
       CrmConvertProperties properties,
+      CrmEntitlementGuard entitlementGuard,
       RestTemplate crmRestTemplate,
       TimelineService timelineService,
       ErpFederationService erpFederationService) {
     this.leadRepository = leadRepository;
     this.convertEventRepository = convertEventRepository;
     this.properties = properties;
+    this.entitlementGuard = entitlementGuard;
     this.restTemplate = crmRestTemplate;
     this.timelineService = timelineService;
     this.erpFederationService = erpFederationService;
@@ -71,7 +75,7 @@ public class LeadConvertService {
     if (prior != null) {
       Map<String, Object> ack = new LinkedHashMap<>(prior);
       ack.put("alreadyConverted", true);
-      ack.put("convertEnabled", properties.isEnabled());
+      ack.put("convertEnabled", liveConvertAllowed());
       ack.put("mode", priorMode(prior));
       return ack;
     }
@@ -94,9 +98,10 @@ public class LeadConvertService {
     event.setTargetSystem(target);
     event.setRequestJson(request);
 
-    if (!properties.isEnabled()) {
+    if (!liveConvertAllowed()) {
       event.setStatus("SKIPPED");
-      event.setResponseJson(Map.of("note", "crm.convert.enabled=false — payload stored only"));
+      event.setResponseJson(
+          Map.of("note", "FEATURE_CRM_CONVERT is off for this shop — payload stored only"));
       event = convertEventRepository.save(event);
       stashRef(lead, target, event, false);
       return toResponse(event, false, "DISABLED");
@@ -247,6 +252,10 @@ public class LeadConvertService {
     }
   }
 
+  private boolean liveConvertAllowed() {
+    return entitlementGuard.convertAllowed(properties.isEnabled());
+  }
+
   private Map<String, Object> toResponse(
       CrmConvertEventEntity e, boolean alreadyConverted, String mode) {
     Map<String, Object> m = new LinkedHashMap<>();
@@ -259,7 +268,7 @@ public class LeadConvertService {
     m.put("request", e.getRequestJson());
     m.put("response", e.getResponseJson());
     m.put("alreadyConverted", alreadyConverted);
-    m.put("convertEnabled", properties.isEnabled());
+    m.put("convertEnabled", liveConvertAllowed());
     m.put("mode", mode);
     return m;
   }

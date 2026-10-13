@@ -23,6 +23,7 @@ public class CrmProperties {
   private String automationFlag = "FEATURE_CRM_AUTOMATION";
   private String apiFlag = "FEATURE_CRM_API";
   private String casesFlag = "FEATURE_CRM_CASES";
+  private String convertFlag = "FEATURE_CRM_CONVERT";
 
   /** If subscription-service is unreachable, allow request when true. */
   private boolean failOpen = false;
@@ -137,6 +138,14 @@ public class CrmProperties {
 
   public void setCasesFlag(String casesFlag) {
     this.casesFlag = casesFlag;
+  }
+
+  public String getConvertFlag() {
+    return convertFlag;
+  }
+
+  public void setConvertFlag(String convertFlag) {
+    this.convertFlag = convertFlag;
   }
 
   public boolean isFailOpen() {

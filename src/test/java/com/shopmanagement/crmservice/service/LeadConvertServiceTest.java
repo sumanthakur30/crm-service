@@ -2,6 +2,7 @@ package com.shopmanagement.crmservice.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
 import com.shopmanagement.crmservice.config.CrmConvertProperties;
+import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.persistence.entity.CrmConvertEventEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
@@ -37,6 +39,7 @@ class LeadConvertServiceTest {
   @Mock private RestTemplate restTemplate;
   @Mock private TimelineService timelineService;
   @Mock private ErpFederationService erpFederationService;
+  @Mock private CrmEntitlementGuard entitlementGuard;
 
   private CrmConvertProperties properties;
   private LeadConvertService service;
@@ -46,11 +49,13 @@ class LeadConvertServiceTest {
     properties = new CrmConvertProperties();
     properties.setEnabled(true);
     properties.setShopCustomerUrl("http://localhost:8095/api/v1/crm/adapters/erp/SHOP_CUSTOMER");
+    lenient().when(entitlementGuard.convertAllowed(true)).thenReturn(true);
     service =
         new LeadConvertService(
             leadRepository,
             convertEventRepository,
             properties,
+            entitlementGuard,
             restTemplate,
             timelineService,
             erpFederationService);
@@ -122,6 +127,60 @@ class LeadConvertServiceTest {
             captor.capture(),
             any(org.springframework.core.ParameterizedTypeReference.class));
     assertThat(captor.getValue().getHeaders().getFirst("X-Shop-Id")).isEqualTo("99");
+  }
+
+  @Test
+  void convert_storesSkippedWhenPlanDoesNotIncludeConvert() {
+    properties.setEnabled(false);
+    when(entitlementGuard.convertAllowed(false)).thenReturn(false);
+    CrmLeadEntity lead = baseLead();
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("42", 1L)).thenReturn(Optional.of(lead));
+    when(convertEventRepository.save(any(CrmConvertEventEntity.class)))
+        .thenAnswer(
+            inv -> {
+              CrmConvertEventEntity event = inv.getArgument(0);
+              event.setId(56L);
+              return event;
+            });
+
+    Map<String, Object> result = service.convert(1L, "SHOP_CUSTOMER");
+
+    assertThat(result.get("status")).isEqualTo("SKIPPED");
+    assertThat(result.get("convertEnabled")).isEqualTo(false);
+    verify(restTemplate, never())
+        .exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            any(HttpEntity.class),
+            any(org.springframework.core.ParameterizedTypeReference.class));
+  }
+
+  @Test
+  void convert_sendsWhenPlanIncludesConvert() {
+    properties.setEnabled(false);
+    when(entitlementGuard.convertAllowed(false)).thenReturn(true);
+    CrmLeadEntity lead = baseLead();
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("42", 1L)).thenReturn(Optional.of(lead));
+    when(convertEventRepository.save(any(CrmConvertEventEntity.class)))
+        .thenAnswer(
+            inv -> {
+              CrmConvertEventEntity event = inv.getArgument(0);
+              event.setId(57L);
+              return event;
+            });
+    when(leadRepository.save(any(CrmLeadEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(restTemplate.exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            any(HttpEntity.class),
+            any(org.springframework.core.ParameterizedTypeReference.class)))
+        .thenReturn(ResponseEntity.ok(Map.of("id", "CUST-9")));
+
+    Map<String, Object> result = service.convert(1L, "SHOP_CUSTOMER");
+
+    assertThat(result.get("status")).isEqualTo("SENT");
+    assertThat(result.get("convertEnabled")).isEqualTo(true);
+    assertThat(lead.getStatus()).isEqualTo("CONVERTED");
   }
 
   private static CrmLeadEntity baseLead() {

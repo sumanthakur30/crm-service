@@ -97,6 +97,25 @@ class CrmEntitlementGuardTest {
   }
 
   @Test
+  void convertAllowed_usesThePlanWhenTheOpsSwitchIsOff() {
+    when(client.hasFeature("tenant-demo", "FEATURE_CRM_CONVERT")).thenReturn(true);
+
+    assertThat(guard.convertAllowed(false)).isTrue();
+  }
+
+  @Test
+  void convertAllowed_staysOffWhenThePlanDoesNotIncludeIt() {
+    when(client.hasFeature("tenant-demo", "FEATURE_CRM_CONVERT")).thenReturn(false);
+
+    assertThat(guard.convertAllowed(false)).isFalse();
+  }
+
+  @Test
+  void convertAllowed_opsSwitchDoesNotAskThePlan() {
+    assertThat(guard.convertAllowed(true)).isTrue();
+  }
+
+  @Test
   void requireCasesAccess_blocksWhenFlagMissing() {
     when(client.hasFeature("tenant-demo", "FEATURE_CRM")).thenReturn(true);
     when(client.hasFeature("tenant-demo", "FEATURE_CRM_CASES")).thenReturn(false);
