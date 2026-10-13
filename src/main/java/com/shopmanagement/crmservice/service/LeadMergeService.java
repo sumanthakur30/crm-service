@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.springframework.http.HttpStatus;
@@ -12,7 +14,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.shopmanagement.crmservice.persistence.entity.CrmAccountEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmDuplicateRuleEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
+import com.shopmanagement.crmservice.persistence.repo.CrmAccountRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.support.TenantIds;
 
@@ -20,37 +25,65 @@ import com.shopmanagement.crmservice.support.TenantIds;
 public class LeadMergeService {
 
   private final CrmLeadRepository leadRepository;
+  private final CrmAccountRepository accountRepository;
   private final TimelineService timelineService;
+  private final DuplicateRuleService duplicateRuleService;
 
-  public LeadMergeService(CrmLeadRepository leadRepository, TimelineService timelineService) {
+  public LeadMergeService(
+      CrmLeadRepository leadRepository,
+      CrmAccountRepository accountRepository,
+      TimelineService timelineService,
+      DuplicateRuleService duplicateRuleService) {
     this.leadRepository = leadRepository;
+    this.accountRepository = accountRepository;
     this.timelineService = timelineService;
+    this.duplicateRuleService = duplicateRuleService;
   }
 
   @Transactional(readOnly = true)
   public List<Map<String, Object>> findDuplicates(Long leadId) {
     String tenantId = TenantIds.require();
     CrmLeadEntity lead = requireLead(tenantId, leadId);
-    Set<Long> seen = new LinkedHashSet<>();
-    List<Map<String, Object>> out = new ArrayList<>();
+    List<CrmDuplicateRuleEntity> rules = duplicateRuleService.enabledRules("LEAD");
+    if (rules.isEmpty()) {
+      return List.of();
+    }
 
-    if (lead.getPhone() != null && !lead.getPhone().isBlank()) {
-      for (CrmLeadEntity other :
-          leadRepository.findByTenantIdAndPhoneAndDeletedAtIsNull(tenantId, lead.getPhone())) {
-        if (isDuplicateCandidate(lead, other) && seen.add(other.getId())) {
-          out.add(toSummary(other, "PHONE"));
+    Map<Long, Map<String, Object>> byId = new LinkedHashMap<>();
+    for (CrmDuplicateRuleEntity rule : rules) {
+      String field = rule.getMatchField() == null ? "" : rule.getMatchField().toUpperCase(Locale.ROOT);
+      String needle = extractLeadValue(lead, field);
+      String normalized = DuplicateRuleService.normalize(needle, rule.getNormalizeMode());
+      if (normalized == null) {
+        continue;
+      }
+      for (CrmLeadEntity other : leadRepository.findByTenantIdAndDeletedAtIsNull(tenantId)) {
+        if (!isDuplicateCandidate(lead, other)) {
+          continue;
+        }
+        String otherRaw = extractLeadValue(other, field);
+        String otherNorm = DuplicateRuleService.normalize(otherRaw, rule.getNormalizeMode());
+        if (otherNorm != null && Objects.equals(normalized, otherNorm)) {
+          mergeHit(byId, other, field);
+        }
+      }
+      if ("GSTIN".equals(field)) {
+        for (CrmAccountEntity account :
+            accountRepository.findByTenantIdAndDeletedAtIsNullOrderByNameAsc(tenantId)) {
+          String acctNorm = DuplicateRuleService.normalize(account.getGstin(), rule.getNormalizeMode());
+          if (acctNorm == null || !Objects.equals(normalized, acctNorm)) {
+            continue;
+          }
+          for (CrmLeadEntity other :
+              leadRepository.findByTenantIdAndAccountIdAndDeletedAtIsNull(tenantId, account.getId())) {
+            if (isDuplicateCandidate(lead, other)) {
+              mergeHit(byId, other, "GSTIN_ACCOUNT");
+            }
+          }
         }
       }
     }
-    if (lead.getEmail() != null && !lead.getEmail().isBlank()) {
-      for (CrmLeadEntity other :
-          leadRepository.findByTenantIdAndEmailAndDeletedAtIsNull(tenantId, lead.getEmail())) {
-        if (isDuplicateCandidate(lead, other) && seen.add(other.getId())) {
-          out.add(toSummary(other, "EMAIL"));
-        }
-      }
-    }
-    return out;
+    return new ArrayList<>(byId.values());
   }
 
   @Transactional
@@ -94,6 +127,39 @@ public class LeadMergeService {
     out.put("duplicateId", duplicateId);
     out.put("status", "MERGED");
     return out;
+  }
+
+  private static void mergeHit(Map<Long, Map<String, Object>> byId, CrmLeadEntity other, String matchedOn) {
+    Map<String, Object> existing = byId.get(other.getId());
+    if (existing == null) {
+      byId.put(other.getId(), toSummary(other, matchedOn));
+      return;
+    }
+    Object prev = existing.get("matchedOn");
+    Set<String> fields = new LinkedHashSet<>();
+    if (prev != null) {
+      for (String p : String.valueOf(prev).split(",")) {
+        if (!p.isBlank()) {
+          fields.add(p.trim());
+        }
+      }
+    }
+    fields.add(matchedOn);
+    existing.put("matchedOn", String.join(",", fields));
+  }
+
+  private static String extractLeadValue(CrmLeadEntity lead, String field) {
+    return switch (field) {
+      case "PHONE" -> lead.getPhone();
+      case "EMAIL" -> lead.getEmail();
+      case "GSTIN" -> {
+        if (lead.getAttributes() != null && lead.getAttributes().get("gstin") != null) {
+          yield String.valueOf(lead.getAttributes().get("gstin"));
+        }
+        yield null;
+      }
+      default -> null;
+    };
   }
 
   private static boolean isDuplicateCandidate(CrmLeadEntity self, CrmLeadEntity other) {

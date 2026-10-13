@@ -63,7 +63,9 @@ public final class CrmDealApi {
       @NotNull BigDecimal qty,
       @NotNull BigDecimal unitPrice,
       @NotNull BigDecimal gstRate,
-      BigDecimal discount) {}
+      BigDecimal discount,
+      /** Optional Retail catalog product id for quote→order mapping. */
+      Long productId) {}
 
   public record QuotationUpsert(
       @NotNull Long opportunityId,

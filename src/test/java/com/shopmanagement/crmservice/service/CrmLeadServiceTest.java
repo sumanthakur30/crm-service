@@ -24,6 +24,7 @@ import com.shopmanagement.crmservice.persistence.entity.CrmStageEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmPipelineRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageRepository;
+import com.shopmanagement.crmservice.security.CrmRecordScopeService;
 
 @ExtendWith(MockitoExtension.class)
 class CrmLeadServiceTest {
@@ -37,6 +38,9 @@ class CrmLeadServiceTest {
   @Mock private WorkspaceBootstrapService workspaceBootstrapService;
   @Mock private TimelineService timelineService;
   @Mock private StageAutomationService stageAutomationService;
+  @Mock private CrmRecordScopeService recordScopeService;
+  @Mock private ScoreBandService scoreBandService;
+  @Mock private FollowUpTaskService followUpTaskService;
 
   @InjectMocks private CrmLeadService leadService;
 

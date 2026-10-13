@@ -8,16 +8,20 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.shopmanagement.crmservice.api.CrmSequenceApi.EnrollRequest;
 import com.shopmanagement.crmservice.integration.RuleEngineClient;
+import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmStageAutomationEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmStageEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmTaskEntity;
+import com.shopmanagement.crmservice.persistence.repo.CrmLeadRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageAutomationRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmStageRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmTaskRepository;
@@ -25,7 +29,7 @@ import com.shopmanagement.crmservice.support.TenantIds;
 
 /**
  * Runs CRM-local stage automation rules on lead/deal stage changes, and optionally asks School
- * rule-engine for matched action codes (CREATE_TASK / TIMELINE_NOTE).
+ * rule-engine for matched action codes (CREATE_TASK / TIMELINE_NOTE / ENROLL_SEQUENCE).
  */
 @Service
 public class StageAutomationService {
@@ -33,20 +37,26 @@ public class StageAutomationService {
   private final CrmStageAutomationRepository automationRepository;
   private final CrmStageRepository stageRepository;
   private final CrmTaskRepository taskRepository;
+  private final CrmLeadRepository leadRepository;
   private final TimelineService timelineService;
   private final RuleEngineClient ruleEngineClient;
+  private final SequenceService sequenceService;
 
   public StageAutomationService(
       CrmStageAutomationRepository automationRepository,
       CrmStageRepository stageRepository,
       CrmTaskRepository taskRepository,
+      CrmLeadRepository leadRepository,
       TimelineService timelineService,
-      RuleEngineClient ruleEngineClient) {
+      RuleEngineClient ruleEngineClient,
+      @org.springframework.context.annotation.Lazy SequenceService sequenceService) {
     this.automationRepository = automationRepository;
     this.stageRepository = stageRepository;
     this.taskRepository = taskRepository;
+    this.leadRepository = leadRepository;
     this.timelineService = timelineService;
     this.ruleEngineClient = ruleEngineClient;
+    this.sequenceService = sequenceService;
   }
 
   @Transactional
@@ -72,9 +82,9 @@ public class StageAutomationService {
     e.setToStageCode(blankToNull(str(body.get("toStageCode"))));
     e.setToStageId(asLong(body.get("toStageId")));
     String action = req(body, "actionType").toUpperCase(Locale.ROOT);
-    if (!"CREATE_TASK".equals(action) && !"TIMELINE_NOTE".equals(action)) {
+    if (!Set.of("CREATE_TASK", "TIMELINE_NOTE", "ENROLL_SEQUENCE").contains(action)) {
       throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST, "actionType must be CREATE_TASK or TIMELINE_NOTE");
+          HttpStatus.BAD_REQUEST, "actionType must be CREATE_TASK, TIMELINE_NOTE, or ENROLL_SEQUENCE");
     }
     e.setActionType(action);
     @SuppressWarnings("unchecked")
@@ -85,6 +95,18 @@ public class StageAutomationService {
     e.setActionConfig(config);
     e.setActive(body.get("active") == null || Boolean.TRUE.equals(body.get("active")));
     e.setSortOrder(body.get("sortOrder") instanceof Number n ? n.intValue() : 100);
+    return toMap(automationRepository.save(e));
+  }
+
+  @Transactional
+  public Map<String, Object> setRuleActive(Long id, boolean active) {
+    String tenantId = TenantIds.require();
+    CrmStageAutomationEntity e =
+        automationRepository
+            .findByTenantIdAndIdAndDeletedAtIsNull(tenantId, id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Rule not found"));
+    e.setActive(active);
+    e.touch();
     return toMap(automationRepository.save(e));
   }
 
@@ -194,6 +216,59 @@ public class StageAutomationService {
           summary,
           Map.of("stageName", stageName));
       out.put("summary", summary);
+    } else if ("ENROLL_SEQUENCE".equalsIgnoreCase(actionType)) {
+      Long sequenceId = asLong(cfg.get("sequenceId"));
+      if (sequenceId == null) {
+        out.put("status", "SKIPPED");
+        out.put("note", "sequenceId required in actionConfig");
+        return out;
+      }
+      String recipient = Objects.toString(cfg.get("recipient"), "").trim();
+      String channel = Objects.toString(cfg.get("channel"), "").trim();
+      Long leadId = "LEAD".equalsIgnoreCase(objectType) ? objectId : null;
+      Long oppId = "OPPORTUNITY".equalsIgnoreCase(objectType) ? objectId : null;
+      if (recipient.isBlank() && leadId != null) {
+        CrmLeadEntity lead =
+            leadRepository
+                .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), leadId)
+                .orElse(null);
+        if (lead != null) {
+          String prefer = Objects.toString(cfg.get("recipientFrom"), "PHONE").toUpperCase(Locale.ROOT);
+          if ("EMAIL".equals(prefer) && lead.getEmail() != null && !lead.getEmail().isBlank()) {
+            recipient = lead.getEmail().trim();
+            if (channel.isBlank()) {
+              channel = "EMAIL";
+            }
+          } else if (lead.getPhone() != null && !lead.getPhone().isBlank()) {
+            recipient = lead.getPhone().trim();
+            if (channel.isBlank()) {
+              channel = "WHATSAPP";
+            }
+          } else if (lead.getEmail() != null && !lead.getEmail().isBlank()) {
+            recipient = lead.getEmail().trim();
+            if (channel.isBlank()) {
+              channel = "EMAIL";
+            }
+          }
+        }
+      }
+      if (recipient.isBlank()) {
+        out.put("status", "SKIPPED");
+        out.put("note", "No recipient for ENROLL_SEQUENCE");
+        return out;
+      }
+      try {
+        var enrolled =
+            sequenceService.enroll(
+                new EnrollRequest(
+                    sequenceId, leadId, oppId, recipient, channel.isBlank() ? null : channel));
+        out.put("status", "ENROLLED");
+        out.put("enrollmentId", enrolled.id());
+        out.put("sequenceId", sequenceId);
+      } catch (RuntimeException ex) {
+        out.put("status", "ERROR");
+        out.put("error", ex.getMessage());
+      }
     }
     return out;
   }

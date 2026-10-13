@@ -2,6 +2,7 @@ package com.shopmanagement.crmservice.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
@@ -107,7 +108,14 @@ class OpsForecastCommitTest {
     commit.setCurrency("INR");
 
     when(opportunityRepository.search(
-            eq("demo-crm"), eq("OPEN"), isNull(), isNull(), any(PageRequest.class)))
+            eq("demo-crm"),
+            eq("OPEN"),
+            isNull(),
+            isNull(),
+            eq("ORG"),
+            isNull(),
+            anyList(),
+            any(PageRequest.class)))
         .thenReturn(new PageImpl<>(List.of(opp)));
     when(forecastCommitRepository.findByTenantIdAndPeriodYmOrderByUpdatedAtDesc(
             eq("demo-crm"), eq("2026-07")))

@@ -15,4 +15,6 @@ public interface CrmScoreRuleRepository extends JpaRepository<CrmScoreRuleEntity
       String tenantId, String eventType);
 
   Optional<CrmScoreRuleEntity> findByTenantIdAndCodeAndDeletedAtIsNull(String tenantId, String code);
+
+  Optional<CrmScoreRuleEntity> findByTenantIdAndIdAndDeletedAtIsNull(String tenantId, Long id);
 }

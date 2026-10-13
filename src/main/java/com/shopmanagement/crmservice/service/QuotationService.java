@@ -189,6 +189,30 @@ public class QuotationService {
   public QuotationResponse accept(Long id) {
     String tenantId = TenantIds.require();
     CrmQuotationEntity quote = require(tenantId, id);
+    String status = quote.getStatus() == null ? "" : quote.getStatus().trim().toUpperCase();
+    if ("SUPERSEDED".equals(status)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot accept a superseded quote");
+    }
+    if ("ACCEPTED".equals(status)) {
+      // Idempotent: re-run order create path if still missing, else return current
+      Map<String, Object> share =
+          new LinkedHashMap<>(
+              quote.getSharePayloadJson() == null ? buildSharePayload(quote) : quote.getSharePayloadJson());
+      if (share.get("orderId") == null && orderClient.isEnabled()) {
+        Map<String, Object> orderResult = maybeCreateOrder(tenantId, quote, share);
+        if (orderResult != null) {
+          share.put("orderCreate", orderResult);
+          if (orderResult.get("orderId") != null) {
+            share.put("orderId", orderResult.get("orderId"));
+            share.put("orderNumber", orderResult.get("orderNumber"));
+          }
+          quote.setSharePayloadJson(share);
+          quote.touch();
+          quote = quotationRepository.save(quote);
+        }
+      }
+      return toResponse(quote);
+    }
     quote.setStatus("ACCEPTED");
     quote.setAcceptedAt(java.time.Instant.now());
     Map<String, Object> share =
@@ -412,15 +436,17 @@ public class QuotationService {
     }
     Long customerId = resolveCustomerId(tenantId, quote);
     Long productId = orderClient.properties().getDefaultProductId();
-    if (customerId == null || productId == null) {
+    List<Map<String, Object>> items = toOrderItems(quote, productId);
+    boolean anyProduct =
+        items.stream().anyMatch(i -> i.get("productId") != null);
+    if (customerId == null || !anyProduct) {
       Map<String, Object> skipped = new LinkedHashMap<>();
       skipped.put("status", "SKIPPED_UNMAPPED");
       skipped.put(
           "note",
-          "Set crm.order.default-customer-id and default-product-id (or convert lead to SHOP_CUSTOMER first)");
+          "Set crm.order.default-product-id (or line productId) and convert lead to SHOP_CUSTOMER / set default-customer-id");
       return skipped;
     }
-    List<Map<String, Object>> items = toOrderItems(quote, productId);
     if (items.isEmpty()) {
       return Map.of("status", "SKIPPED_NO_LINES");
     }
@@ -471,7 +497,8 @@ public class QuotationService {
         continue;
       }
       Map<String, Object> item = new LinkedHashMap<>();
-      item.put("productId", productId);
+      Long lineProduct = asLong(map.get("productId"));
+      item.put("productId", lineProduct != null ? lineProduct : productId);
       item.put("productName", Objects.toString(map.get("description"), "CRM line"));
       item.put("hsnSac", map.get("hsn") == null ? null : String.valueOf(map.get("hsn")));
       BigDecimal qty = asDecimal(map.get("qty"));
@@ -587,6 +614,7 @@ public class QuotationService {
       m.put("unitPrice", price);
       m.put("gstRate", rate);
       m.put("discount", disc);
+      m.put("productId", line.productId());
       m.put("taxable", lineTaxable);
       m.put("tax", tax);
       lineMaps.add(m);

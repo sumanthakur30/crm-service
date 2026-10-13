@@ -2,6 +2,7 @@ package com.shopmanagement.crmservice.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
 import com.shopmanagement.crmservice.config.CrmConvertProperties;
+import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.persistence.entity.CrmConvertEventEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
@@ -36,6 +38,8 @@ class LeadConvertServiceTest {
   @Mock private CrmConvertEventRepository convertEventRepository;
   @Mock private RestTemplate restTemplate;
   @Mock private TimelineService timelineService;
+  @Mock private ErpFederationService erpFederationService;
+  @Mock private CrmEntitlementGuard entitlementGuard;
 
   private CrmConvertProperties properties;
   private LeadConvertService service;
@@ -45,9 +49,16 @@ class LeadConvertServiceTest {
     properties = new CrmConvertProperties();
     properties.setEnabled(true);
     properties.setShopCustomerUrl("http://localhost:8095/api/v1/crm/adapters/erp/SHOP_CUSTOMER");
+    lenient().when(entitlementGuard.convertAllowed(true)).thenReturn(true);
     service =
         new LeadConvertService(
-            leadRepository, convertEventRepository, properties, restTemplate, timelineService);
+            leadRepository,
+            convertEventRepository,
+            properties,
+            entitlementGuard,
+            restTemplate,
+            timelineService,
+            erpFederationService);
     TenantContextFilter.bindTenantForTests("42");
     TenantContextFilter.bindShopForTests("99");
   }
@@ -116,6 +127,166 @@ class LeadConvertServiceTest {
             captor.capture(),
             any(org.springframework.core.ParameterizedTypeReference.class));
     assertThat(captor.getValue().getHeaders().getFirst("X-Shop-Id")).isEqualTo("99");
+    assertThat(captor.getValue().getHeaders().getFirst("X-Tenant-Id")).isEqualTo("42");
+  }
+
+  @Test
+  void convert_storesSkippedWhenPlanDoesNotIncludeConvert() {
+    properties.setEnabled(false);
+    when(entitlementGuard.convertAllowed(false)).thenReturn(false);
+    CrmLeadEntity lead = baseLead();
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("42", 1L)).thenReturn(Optional.of(lead));
+    when(convertEventRepository.save(any(CrmConvertEventEntity.class)))
+        .thenAnswer(
+            inv -> {
+              CrmConvertEventEntity event = inv.getArgument(0);
+              event.setId(56L);
+              return event;
+            });
+
+    Map<String, Object> result = service.convert(1L, "SHOP_CUSTOMER");
+
+    assertThat(result.get("status")).isEqualTo("SKIPPED");
+    assertThat(result.get("convertEnabled")).isEqualTo(false);
+    verify(restTemplate, never())
+        .exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            any(HttpEntity.class),
+            any(org.springframework.core.ParameterizedTypeReference.class));
+  }
+
+  @Test
+  void convert_sendsWhenPlanIncludesConvert() {
+    properties.setEnabled(false);
+    when(entitlementGuard.convertAllowed(false)).thenReturn(true);
+    CrmLeadEntity lead = baseLead();
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("42", 1L)).thenReturn(Optional.of(lead));
+    when(convertEventRepository.save(any(CrmConvertEventEntity.class)))
+        .thenAnswer(
+            inv -> {
+              CrmConvertEventEntity event = inv.getArgument(0);
+              event.setId(57L);
+              return event;
+            });
+    when(leadRepository.save(any(CrmLeadEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(restTemplate.exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            any(HttpEntity.class),
+            any(org.springframework.core.ParameterizedTypeReference.class)))
+        .thenReturn(ResponseEntity.ok(Map.of("id", "CUST-9")));
+
+    Map<String, Object> result = service.convert(1L, "SHOP_CUSTOMER");
+
+    assertThat(result.get("status")).isEqualTo("SENT");
+    assertThat(result.get("convertEnabled")).isEqualTo(true);
+    assertThat(lead.getStatus()).isEqualTo("CONVERTED");
+  }
+
+  @Test
+  void convert_shopCustomerUsesNumericSignInTenantAndShopCode() {
+    TenantContextFilter.bindTenantForTests("GEN-DEMO-01");
+    TenantContextFilter.bindShopForTests("GEN-DEMO-01");
+    TenantContextFilter.bindJwtTenantForTests(21L);
+    CrmLeadEntity lead = baseLead();
+    lead.setTenantId("GEN-DEMO-01");
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("GEN-DEMO-01", 1L))
+        .thenReturn(Optional.of(lead));
+    when(convertEventRepository.save(any(CrmConvertEventEntity.class)))
+        .thenAnswer(
+            inv -> {
+              CrmConvertEventEntity event = inv.getArgument(0);
+              event.setId(58L);
+              return event;
+            });
+    when(leadRepository.save(any(CrmLeadEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(restTemplate.exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            any(HttpEntity.class),
+            any(org.springframework.core.ParameterizedTypeReference.class)))
+        .thenReturn(ResponseEntity.ok(Map.of("id", 9001)));
+
+    Map<String, Object> result = service.convert(1L, "SHOP_CUSTOMER");
+
+    assertThat(result.get("status")).isEqualTo("SENT");
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<HttpEntity<Map<String, Object>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+    verify(restTemplate)
+        .exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            captor.capture(),
+            any(org.springframework.core.ParameterizedTypeReference.class));
+    assertThat(captor.getValue().getHeaders().getFirst("X-Tenant-Id")).isEqualTo("21");
+    assertThat(captor.getValue().getHeaders().getFirst("X-Shop-Id")).isEqualTo("GEN-DEMO-01");
+  }
+
+  @Test
+  void convert_shopCustomerDoesNotCallUserServiceWhenTenantIsShopCode() {
+    TenantContextFilter.bindTenantForTests("GEN-DEMO-01");
+    TenantContextFilter.bindShopForTests("GEN-DEMO-01");
+    CrmLeadEntity lead = baseLead();
+    lead.setTenantId("GEN-DEMO-01");
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("GEN-DEMO-01", 1L))
+        .thenReturn(Optional.of(lead));
+    when(convertEventRepository.save(any(CrmConvertEventEntity.class)))
+        .thenAnswer(
+            inv -> {
+              CrmConvertEventEntity event = inv.getArgument(0);
+              event.setId(59L);
+              return event;
+            });
+    when(leadRepository.save(any(CrmLeadEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    Map<String, Object> result = service.convert(1L, "SHOP_CUSTOMER");
+
+    assertThat(result.get("status")).isEqualTo("FAILED");
+    assertThat(lead.getStatus()).isEqualTo("OPEN");
+    verify(restTemplate, never())
+        .exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            any(HttpEntity.class),
+            any(org.springframework.core.ParameterizedTypeReference.class));
+  }
+
+  @Test
+  void convert_schoolInquiryKeepsCrmTenantHeader() {
+    TenantContextFilter.bindTenantForTests("GEN-DEMO-01");
+    TenantContextFilter.bindShopForTests("GEN-DEMO-01");
+    CrmLeadEntity lead = baseLead();
+    lead.setTenantId("GEN-DEMO-01");
+    when(leadRepository.findByTenantIdAndIdAndDeletedAtIsNull("GEN-DEMO-01", 1L))
+        .thenReturn(Optional.of(lead));
+    when(convertEventRepository.save(any(CrmConvertEventEntity.class)))
+        .thenAnswer(
+            inv -> {
+              CrmConvertEventEntity event = inv.getArgument(0);
+              event.setId(60L);
+              return event;
+            });
+    when(leadRepository.save(any(CrmLeadEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(restTemplate.exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            any(HttpEntity.class),
+            any(org.springframework.core.ParameterizedTypeReference.class)))
+        .thenReturn(ResponseEntity.ok(Map.of("id", "INQ-1")));
+
+    service.convert(1L, "SCHOOL_INQUIRY");
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<HttpEntity<Map<String, Object>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+    verify(restTemplate)
+        .exchange(
+            any(String.class),
+            any(HttpMethod.class),
+            captor.capture(),
+            any(org.springframework.core.ParameterizedTypeReference.class));
+    assertThat(captor.getValue().getHeaders().getFirst("X-Tenant-Id")).isEqualTo("GEN-DEMO-01");
+    assertThat(captor.getValue().getHeaders().getFirst("X-Shop-Id")).isEqualTo("GEN-DEMO-01");
   }
 
   private static CrmLeadEntity baseLead() {

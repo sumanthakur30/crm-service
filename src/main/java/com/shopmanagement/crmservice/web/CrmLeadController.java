@@ -22,9 +22,12 @@ import com.shopmanagement.crmservice.api.CrmLeadApi.ImportResult;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadStatusPatch;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
+import com.shopmanagement.crmservice.api.CrmPartyConvertApi.ConvertToCrmRequest;
+import com.shopmanagement.crmservice.api.CrmPartyConvertApi.ConvertToCrmResponse;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.AssignmentService;
 import com.shopmanagement.crmservice.service.CrmLeadService;
+import com.shopmanagement.crmservice.service.CrmPartyConvertService;
 import com.shopmanagement.crmservice.service.LeadConvertService;
 import com.shopmanagement.crmservice.service.LeadImportService;
 import com.shopmanagement.crmservice.service.TimelineService;
@@ -40,6 +43,7 @@ public class CrmLeadController {
   private final LeadImportService importService;
   private final TimelineService timelineService;
   private final LeadConvertService leadConvertService;
+  private final CrmPartyConvertService partyConvertService;
   private final CrmEntitlementGuard entitlementGuard;
 
   public CrmLeadController(
@@ -48,12 +52,14 @@ public class CrmLeadController {
       LeadImportService importService,
       TimelineService timelineService,
       LeadConvertService leadConvertService,
+      CrmPartyConvertService partyConvertService,
       CrmEntitlementGuard entitlementGuard) {
     this.leadService = leadService;
     this.assignmentService = assignmentService;
     this.importService = importService;
     this.timelineService = timelineService;
     this.leadConvertService = leadConvertService;
+    this.partyConvertService = partyConvertService;
     this.entitlementGuard = entitlementGuard;
   }
 
@@ -133,6 +139,14 @@ public class CrmLeadController {
       @PathVariable Long id, @RequestParam String targetSystem) {
     entitlementGuard.requireCrmAccess();
     return leadConvertService.convert(id, targetSystem);
+  }
+
+  /** CRM party convert (account/contact/opportunity) — separate from ERP convert. */
+  @PostMapping("/{id}/convert-to-crm")
+  public ConvertToCrmResponse convertToCrm(
+      @PathVariable Long id, @Valid @RequestBody ConvertToCrmRequest body) {
+    entitlementGuard.requireCrmAccess();
+    return partyConvertService.convert(id, body);
   }
 
   @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

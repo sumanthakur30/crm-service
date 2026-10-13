@@ -16,6 +16,8 @@ public interface CrmOpportunityRepository extends JpaRepository<CrmOpportunityEn
 
   Optional<CrmOpportunityEntity> findByTenantIdAndIdAndDeletedAtIsNull(String tenantId, Long id);
 
+  List<CrmOpportunityEntity> findByTenantIdAndAccountIdAndDeletedAtIsNull(String tenantId, Long accountId);
+
   List<CrmOpportunityEntity> findByTenantIdAndStatusAndUpdatedAtBeforeAndDeletedAtIsNull(
       String tenantId, String status, Instant before);
 
@@ -29,12 +31,36 @@ public interface CrmOpportunityRepository extends JpaRepository<CrmOpportunityEn
   List<Object[]> openFunnelByStage(@Param("tenantId") String tenantId);
 
   long countByTenantIdAndStatusAndDeletedAtIsNull(String tenantId, String status);
+
+  List<CrmOpportunityEntity> findByTenantIdAndStatusAndDeletedAtIsNull(String tenantId, String status);
+
+  @Query(
+      """
+      SELECT COALESCE(o.closeReasonCode, 'UNKNOWN'), COUNT(o), COALESCE(SUM(o.amount), 0)
+      FROM CrmOpportunityEntity o
+      WHERE o.tenantId = :tenantId AND o.deletedAt IS NULL AND o.status = :status
+      GROUP BY COALESCE(o.closeReasonCode, 'UNKNOWN')
+      ORDER BY COUNT(o) DESC
+      """)
+  List<Object[]> countClosedByReason(@Param("tenantId") String tenantId, @Param("status") String status);
   @Query(
       """
       SELECT o FROM CrmOpportunityEntity o
       WHERE o.tenantId = :tenantId AND o.deletedAt IS NULL
         AND (:status IS NULL OR o.status = :status)
         AND (:stageId IS NULL OR o.stageId = :stageId)
+        AND (
+          :scopeMode IS NULL OR :scopeMode = 'ORG'
+          OR (
+            :scopeMode = 'OWN' AND o.ownerUserId = :scopeUserId
+          )
+          OR (
+            :scopeMode = 'TEAM' AND (
+              o.ownerUserId = :scopeUserId
+              OR (o.teamId IS NOT NULL AND o.teamId IN :scopeTeamIds)
+            )
+          )
+        )
         AND (
           :q IS NULL OR :q = '' OR
           LOWER(o.name) LIKE LOWER(CONCAT('%', :q, '%'))
@@ -45,5 +71,8 @@ public interface CrmOpportunityRepository extends JpaRepository<CrmOpportunityEn
       @Param("status") String status,
       @Param("stageId") Long stageId,
       @Param("q") String q,
+      @Param("scopeMode") String scopeMode,
+      @Param("scopeUserId") String scopeUserId,
+      @Param("scopeTeamIds") List<String> scopeTeamIds,
       Pageable pageable);
 }

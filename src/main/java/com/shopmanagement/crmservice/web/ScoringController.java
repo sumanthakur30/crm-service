@@ -3,26 +3,35 @@ package com.shopmanagement.crmservice.web;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadResponse;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.service.BehaviorScoringService;
+import com.shopmanagement.crmservice.service.ScoreBandService;
 
 @RestController
 @RequestMapping("/api/v1/crm/scoring")
 public class ScoringController {
 
   private final BehaviorScoringService scoringService;
+  private final ScoreBandService scoreBandService;
   private final CrmEntitlementGuard entitlementGuard;
 
-  public ScoringController(BehaviorScoringService scoringService, CrmEntitlementGuard entitlementGuard) {
+  public ScoringController(
+      BehaviorScoringService scoringService,
+      ScoreBandService scoreBandService,
+      CrmEntitlementGuard entitlementGuard) {
     this.scoringService = scoringService;
+    this.scoreBandService = scoreBandService;
     this.entitlementGuard = entitlementGuard;
   }
 
@@ -36,6 +45,25 @@ public class ScoringController {
   public List<Map<String, Object>> rules() {
     entitlementGuard.requireCrmAccess();
     return scoringService.listRules();
+  }
+
+  @PostMapping("/rules")
+  @ResponseStatus(HttpStatus.CREATED)
+  public Map<String, Object> upsertRule(@RequestBody Map<String, Object> body) {
+    entitlementGuard.requireCrmAccess();
+    return scoringService.upsertRule(body);
+  }
+
+  @GetMapping("/bands")
+  public Map<String, Object> bands() {
+    entitlementGuard.requireCrmAccess();
+    return scoreBandService.getOrEnsure();
+  }
+
+  @PutMapping("/bands")
+  public Map<String, Object> updateBands(@RequestBody Map<String, Object> body) {
+    entitlementGuard.requireCrmAccess();
+    return scoreBandService.update(body);
   }
 
   @PostMapping("/leads/{leadId}/events")

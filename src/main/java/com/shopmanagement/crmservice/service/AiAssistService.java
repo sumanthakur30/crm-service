@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.shopmanagement.crmservice.ai.LlmProvider;
 import com.shopmanagement.crmservice.config.CrmAiProperties;
 import com.shopmanagement.crmservice.integration.AiHttpClient;
 import com.shopmanagement.crmservice.persistence.entity.CrmAiInsightEntity;
@@ -36,6 +37,9 @@ public class AiAssistService {
   private final CrmTenantEnterpriseRepository enterpriseRepository;
   private final TimelineService timelineService;
   private final AiHttpClient aiHttpClient;
+  private final ScoreBandService scoreBandService;
+  private final LlmProvider llmProvider;
+  private final UsageMeterService usageMeterService;
 
   public AiAssistService(
       CrmAiProperties aiProperties,
@@ -45,7 +49,10 @@ public class AiAssistService {
       CrmScoreEventRepository scoreEventRepository,
       CrmTenantEnterpriseRepository enterpriseRepository,
       TimelineService timelineService,
-      AiHttpClient aiHttpClient) {
+      AiHttpClient aiHttpClient,
+      ScoreBandService scoreBandService,
+      LlmProvider llmProvider,
+      UsageMeterService usageMeterService) {
     this.aiProperties = aiProperties;
     this.insightRepository = insightRepository;
     this.leadRepository = leadRepository;
@@ -54,6 +61,9 @@ public class AiAssistService {
     this.enterpriseRepository = enterpriseRepository;
     this.timelineService = timelineService;
     this.aiHttpClient = aiHttpClient;
+    this.scoreBandService = scoreBandService;
+    this.llmProvider = llmProvider;
+    this.usageMeterService = usageMeterService;
   }
 
   @Transactional
@@ -83,15 +93,17 @@ public class AiAssistService {
             + (lead.getUtmSource() != null ? " · UTM " + lead.getUtmSource() + "/" + nvl(lead.getUtmMedium(), "-") : "")
             + ".";
     body = localize(body, lang);
-    Map<String, Object> http =
-        aiHttpClient.complete(
+    long t0 = System.currentTimeMillis();
+    Map<String, Object> remote =
+        llmProvider.complete(
             "SUMMARY",
             lang,
             Map.of("leadId", leadId, "title", lead.getTitle(), "score", score, "status", lead.getStatus()));
-    if (http.get("body") != null) {
-      body = String.valueOf(http.get("body"));
+    long latencyMs = System.currentTimeMillis() - t0;
+    if (remote.get("body") != null) {
+      body = String.valueOf(remote.get("body"));
     }
-    String title = http.get("title") != null ? String.valueOf(http.get("title")) : "Lead summary";
+    String title = remote.get("title") != null ? String.valueOf(remote.get("title")) : "Lead summary";
     return persist(
         "LEAD",
         leadId,
@@ -100,7 +112,15 @@ public class AiAssistService {
         body,
         confidence(0.72 + Math.min(0.2, score / 500.0)),
         lang,
-        Map.of("score", score, "status", lead.getStatus(), "provider", aiProperties.getProvider()));
+        Map.of(
+            "score",
+            score,
+            "status",
+            lead.getStatus(),
+            "provider",
+            llmProvider.code(),
+            "latencyMs",
+            latencyMs));
   }
 
   @Transactional
@@ -111,21 +131,45 @@ public class AiAssistService {
     String lang = normalizeLang(language, tenantId);
     String action;
     String reason;
+    String band = scoreBandService.resolveBand(lead.getScore());
     if (lead.getPhone() == null || lead.getPhone().isBlank()) {
       action = "Capture phone number";
       reason = "No phone on file — blocks WhatsApp sequences and call logging.";
-    } else if (lead.getScore() < 30) {
+    } else if ("COLD".equals(band)) {
       action = "Send welcome sequence + book discovery call";
-      reason = "Low engagement score (" + lead.getScore() + ").";
-    } else if (lead.getScore() < 60) {
+      reason = "Cold score band (" + lead.getScore() + ").";
+    } else if ("WARM".equals(band)) {
       action = "Share GST quotation draft";
-      reason = "Mid score — convert interest into a priced proposal.";
+      reason = "Warm score — convert interest into a priced proposal.";
     } else {
       action = "Request manager approval and close";
-      reason = "High score (" + lead.getScore() + ") — push to opportunity won.";
+      reason = "Hot score (" + lead.getScore() + ") — push to opportunity won.";
     }
     String body = "NBA: " + action + ". Why: " + reason;
     body = localize(body, lang);
+    long t0 = System.currentTimeMillis();
+    Map<String, Object> remote =
+        llmProvider.complete(
+            "NBA",
+            lang,
+            Map.of(
+                "leadId",
+                leadId,
+                "score",
+                lead.getScore(),
+                "band",
+                band,
+                "heuristicAction",
+                action,
+                "heuristicReason",
+                reason));
+    long latencyMs = System.currentTimeMillis() - t0;
+    if (remote.get("body") != null) {
+      body = String.valueOf(remote.get("body"));
+    }
+    if (remote.get("title") != null) {
+      action = String.valueOf(remote.get("title"));
+    }
     return persist(
         "LEAD",
         leadId,
@@ -134,7 +178,15 @@ public class AiAssistService {
         body,
         confidence(0.68),
         lang,
-        Map.of("action", action, "reason", reason));
+        Map.of(
+            "action",
+            action,
+            "reason",
+            reason,
+            "provider",
+            llmProvider.code(),
+            "latencyMs",
+            latencyMs));
   }
 
   @Transactional
@@ -208,7 +260,9 @@ public class AiAssistService {
     String tenantId = TenantIds.require();
     CrmLeadEntity lead = requireLead(tenantId, leadId);
     String lang = normalizeLang(language, tenantId);
-    boolean churn = lead.getScore() < 25 || "LOST".equalsIgnoreCase(lead.getStatus());
+    boolean churn =
+        "COLD".equals(scoreBandService.resolveBand(lead.getScore()))
+            || "LOST".equalsIgnoreCase(lead.getStatus());
     String type = churn ? "CHURN_RISK" : "UPSELL";
     String title = churn ? "Churn / drop-off risk" : "Upsell opportunity";
     String body =
@@ -218,7 +272,7 @@ public class AiAssistService {
                 + ", status "
                 + lead.getStatus()
                 + "). Re-engage via WhatsApp sequence within 24h."
-            : "Lead is warm (score "
+            : "Lead is warm/hot (score "
                 + lead.getScore()
                 + "). Offer Professional plan add-on or multi-year quote.";
     body = localize(body, lang);
@@ -281,13 +335,15 @@ public class AiAssistService {
                   + ". Shall I send a GST quotation on WhatsApp?";
         };
     draft = localize(draft, lang);
-    Map<String, Object> http =
-        aiHttpClient.complete(
+    long t0 = System.currentTimeMillis();
+    Map<String, Object> remote =
+        llmProvider.complete(
             "DRAFT",
             lang,
             Map.of("leadId", leadId, "channel", ch, "name", name, "title", lead.getTitle()));
-    if (http.get("body") != null) {
-      draft = String.valueOf(http.get("body"));
+    long latencyMs = System.currentTimeMillis() - t0;
+    if (remote.get("body") != null) {
+      draft = String.valueOf(remote.get("body"));
     }
     return persist(
         "LEAD",
@@ -297,7 +353,7 @@ public class AiAssistService {
         draft,
         confidence(0.75),
         lang,
-        Map.of("channel", ch, "provider", aiProperties.getProvider()));
+        Map.of("channel", ch, "provider", llmProvider.code(), "latencyMs", latencyMs));
   }
 
   @Transactional
@@ -343,6 +399,18 @@ public class AiAssistService {
         .toList();
   }
 
+  @Transactional(readOnly = true)
+  public Map<String, Object> status() {
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("enabled", aiProperties.isEnabled());
+    out.put("provider", llmProvider.code());
+    out.put("configuredProvider", aiProperties.getProvider());
+    out.put("modelCode", aiProperties.getModelCode());
+    out.put("httpConfigured", aiHttpClient.isHttpProvider());
+    out.put("httpUrlSet", aiProperties.getHttpUrl() != null && !aiProperties.getHttpUrl().isBlank());
+    return out;
+  }
+
   private Map<String, Object> persist(
       String relatedType,
       Long relatedId,
@@ -353,6 +421,10 @@ public class AiAssistService {
       String lang,
       Map<String, Object> payload) {
     String tenantId = TenantIds.require();
+    usageMeterService.incrementAiCall(tenantId);
+    Map<String, Object> enriched = new LinkedHashMap<>(payload == null ? Map.of() : payload);
+    enriched.putIfAbsent("provider", llmProvider.code());
+    enriched.putIfAbsent("modelCode", aiProperties.getModelCode());
     CrmAiInsightEntity e = new CrmAiInsightEntity();
     e.setTenantId(tenantId);
     e.setRelatedType(relatedType);
@@ -363,7 +435,7 @@ public class AiAssistService {
     e.setConfidence(confidence);
     e.setModelCode(aiProperties.getModelCode());
     e.setLanguageCode(lang);
-    e.setPayloadJson(new LinkedHashMap<>(payload));
+    e.setPayloadJson(enriched);
     e = insightRepository.save(e);
     if ("LEAD".equals(relatedType) && relatedId != null && relatedId > 0) {
       timelineService.recordEvent(

@@ -39,4 +39,16 @@ public class StageAutomationController {
     entitlementGuard.requireAutomationAccess();
     return stageAutomationService.createRule(body);
   }
+
+  @PostMapping("/stage-rules/{id}/activate")
+  public Map<String, Object> activate(@org.springframework.web.bind.annotation.PathVariable Long id) {
+    entitlementGuard.requireAutomationAccess();
+    return stageAutomationService.setRuleActive(id, true);
+  }
+
+  @PostMapping("/stage-rules/{id}/deactivate")
+  public Map<String, Object> deactivate(@org.springframework.web.bind.annotation.PathVariable Long id) {
+    entitlementGuard.requireAutomationAccess();
+    return stageAutomationService.setRuleActive(id, false);
+  }
 }

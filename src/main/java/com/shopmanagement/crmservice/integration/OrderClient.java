@@ -117,6 +117,105 @@ public class OrderClient {
     return order;
   }
 
+  /**
+   * Read-only list for Customer 360. Tries {@code GET /orders?customerId=&page=&size=} and filters
+   * client-side. Fail-open when order-service is unreachable.
+   */
+  public Map<String, Object> listByCustomer(String tenantId, Long customerId, int size) {
+    Map<String, Object> result = new LinkedHashMap<>();
+    if (!properties.isEnabled()) {
+      result.put("status", "SKIPPED_DISABLED");
+      result.put("orders", List.of());
+      return result;
+    }
+    if (customerId == null) {
+      result.put("status", "SKIPPED_UNMAPPED");
+      result.put("orders", List.of());
+      return result;
+    }
+    String shopId = resolveShopId(tenantId);
+    String platformTenantId = resolvePlatformTenantId(shopId);
+    int pageSize = Math.max(1, Math.min(size, 50));
+    String url =
+        trimSlash(properties.getBaseUrl())
+            + "/orders?customerId="
+            + customerId
+            + "&page=0&size="
+            + pageSize;
+
+    HttpHeaders headers = federationHeaders(platformTenantId, shopId);
+    try {
+      ResponseEntity<List<Map<String, Object>>> response =
+          restTemplate.exchange(
+              url,
+              HttpMethod.GET,
+              new HttpEntity<>(headers),
+              new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+      List<Map<String, Object>> body =
+          response.getBody() == null ? List.of() : response.getBody();
+      List<Map<String, Object>> filtered = new java.util.ArrayList<>();
+      for (Map<String, Object> row : body) {
+        Object cid = row.get("customerId");
+        if (cid == null || String.valueOf(customerId).equals(String.valueOf(cid))) {
+          filtered.add(row);
+        }
+      }
+      result.put("status", "OK");
+      result.put("httpStatus", response.getStatusCode().value());
+      result.put("orders", filtered);
+      return result;
+    } catch (RestClientException ex) {
+      log.warn("order-service list failed tenant={} customer={}: {}", tenantId, customerId, ex.getMessage());
+      result.put("status", "ERROR");
+      result.put("error", ex.getMessage());
+      result.put("orders", List.of());
+      result.put("failOpen", true);
+      return result;
+    }
+  }
+
+  /** Read single order for Customer 360 enrichment. */
+  public Map<String, Object> getOrder(String tenantId, Object orderId) {
+    Map<String, Object> result = new LinkedHashMap<>();
+    if (!properties.isEnabled() || orderId == null) {
+      result.put("status", "SKIPPED");
+      return result;
+    }
+    String shopId = resolveShopId(tenantId);
+    String platformTenantId = resolvePlatformTenantId(shopId);
+    String url = trimSlash(properties.getBaseUrl()) + "/orders/" + orderId;
+    HttpHeaders headers = federationHeaders(platformTenantId, shopId);
+    try {
+      ResponseEntity<Map<String, Object>> response =
+          restTemplate.exchange(
+              url,
+              HttpMethod.GET,
+              new HttpEntity<>(headers),
+              new ParameterizedTypeReference<Map<String, Object>>() {});
+      result.put("status", "OK");
+      result.put("order", response.getBody() == null ? Map.of() : response.getBody());
+      return result;
+    } catch (RestClientException ex) {
+      log.debug("order-service get {} failed: {}", orderId, ex.getMessage());
+      result.put("status", "ERROR");
+      result.put("error", ex.getMessage());
+      return result;
+    }
+  }
+
+  private HttpHeaders federationHeaders(String platformTenantId, String shopId) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.set("X-Tenant-Id", platformTenantId);
+    headers.set("X-Shop-Id", shopId);
+    headers.set("X-Auth-Permissions", "VIEW_ORDERS,MANAGE_ORDERS");
+    headers.set("X-Auth-User", "crm-service");
+    headers.set("X-Auth-Role", "SERVICE");
+    if (properties.getInternalApiKey() != null && !properties.getInternalApiKey().isBlank()) {
+      headers.set("X-Internal-Api-Key", properties.getInternalApiKey().trim());
+    }
+    return headers;
+  }
+
   private String resolveShopId(String tenantId) {
     if (properties.getShopId() != null && !properties.getShopId().isBlank()) {
       return properties.getShopId().trim();

@@ -20,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.shopmanagement.crmservice.config.CrmConvertProperties;
+import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.persistence.entity.CrmConvertEventEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmLeadEntity;
@@ -35,20 +36,26 @@ public class LeadConvertService {
   private final CrmLeadRepository leadRepository;
   private final CrmConvertEventRepository convertEventRepository;
   private final CrmConvertProperties properties;
+  private final CrmEntitlementGuard entitlementGuard;
   private final RestTemplate restTemplate;
   private final TimelineService timelineService;
+  private final ErpFederationService erpFederationService;
 
   public LeadConvertService(
       CrmLeadRepository leadRepository,
       CrmConvertEventRepository convertEventRepository,
       CrmConvertProperties properties,
+      CrmEntitlementGuard entitlementGuard,
       RestTemplate crmRestTemplate,
-      TimelineService timelineService) {
+      TimelineService timelineService,
+      ErpFederationService erpFederationService) {
     this.leadRepository = leadRepository;
     this.convertEventRepository = convertEventRepository;
     this.properties = properties;
+    this.entitlementGuard = entitlementGuard;
     this.restTemplate = crmRestTemplate;
     this.timelineService = timelineService;
+    this.erpFederationService = erpFederationService;
   }
 
   @Transactional
@@ -68,7 +75,7 @@ public class LeadConvertService {
     if (prior != null) {
       Map<String, Object> ack = new LinkedHashMap<>(prior);
       ack.put("alreadyConverted", true);
-      ack.put("convertEnabled", properties.isEnabled());
+      ack.put("convertEnabled", liveConvertAllowed());
       ack.put("mode", priorMode(prior));
       return ack;
     }
@@ -91,9 +98,10 @@ public class LeadConvertService {
     event.setTargetSystem(target);
     event.setRequestJson(request);
 
-    if (!properties.isEnabled()) {
+    if (!liveConvertAllowed()) {
       event.setStatus("SKIPPED");
-      event.setResponseJson(Map.of("note", "crm.convert.enabled=false — payload stored only"));
+      event.setResponseJson(
+          Map.of("note", "FEATURE_CRM_CONVERT is off for this shop — payload stored only"));
       event = convertEventRepository.save(event);
       stashRef(lead, target, event, false);
       return toResponse(event, false, "DISABLED");
@@ -102,43 +110,51 @@ public class LeadConvertService {
     String url = resolveUrl(target);
     String mode = isSinkUrl(url) ? "SINK" : "LIVE";
     String shopId = resolveShopId(tenantId);
+    String outboundTenantId = outboundTenantId(target, tenantId);
 
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.set("X-Tenant-Id", tenantId);
-    headers.set("X-Shop-Id", shopId);
-    if (properties.getInternalApiKey() != null && !properties.getInternalApiKey().isBlank()) {
-      headers.set("X-Internal-Api-Key", properties.getInternalApiKey().trim());
-    }
-
-    try {
-      ResponseEntity<Map<String, Object>> response =
-          restTemplate.exchange(
-              url,
-              HttpMethod.POST,
-              new HttpEntity<>(request, headers),
-              new ParameterizedTypeReference<Map<String, Object>>() {});
-      Map<String, Object> body = response.getBody() == null ? Map.of() : response.getBody();
-      event.setStatus("SENT");
-      event.setResponseJson(new LinkedHashMap<>(body));
-      Object externalId = body.get("id");
-      if (externalId == null) {
-        externalId = body.get("externalId");
-      }
-      if (externalId != null) {
-        event.setExternalId(String.valueOf(externalId));
-      }
-    } catch (RestClientException ex) {
+    if (outboundTenantId == null) {
       event.setStatus("FAILED");
       event.setErrorMessage(
-          ex.getMessage() == null
-              ? "convert failed"
-              : ex.getMessage().substring(0, Math.min(500, ex.getMessage().length())));
+          "Sign-in has no numeric shop tenant, so the customer was not added. Sign in again, then convert.");
       event.setResponseJson(Map.of("error", event.getErrorMessage()));
-      if (!properties.isFailOpen()) {
-        convertEventRepository.save(event);
-        throw new ResponseStatusException(
-            HttpStatus.BAD_GATEWAY, "ERP convert failed: " + event.getErrorMessage());
+    } else {
+      HttpHeaders headers = new HttpHeaders();
+      headers.setContentType(MediaType.APPLICATION_JSON);
+      headers.set("X-Tenant-Id", outboundTenantId);
+      headers.set("X-Shop-Id", shopId);
+      if (properties.getInternalApiKey() != null && !properties.getInternalApiKey().isBlank()) {
+        headers.set("X-Internal-Api-Key", properties.getInternalApiKey().trim());
+      }
+
+      try {
+        ResponseEntity<Map<String, Object>> response =
+            restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                new HttpEntity<>(request, headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {});
+        Map<String, Object> body = response.getBody() == null ? Map.of() : response.getBody();
+        event.setStatus("SENT");
+        event.setResponseJson(new LinkedHashMap<>(body));
+        Object externalId = body.get("id");
+        if (externalId == null) {
+          externalId = body.get("externalId");
+        }
+        if (externalId != null) {
+          event.setExternalId(String.valueOf(externalId));
+        }
+      } catch (RestClientException ex) {
+        event.setStatus("FAILED");
+        event.setErrorMessage(
+            ex.getMessage() == null
+                ? "convert failed"
+                : ex.getMessage().substring(0, Math.min(500, ex.getMessage().length())));
+        event.setResponseJson(Map.of("error", event.getErrorMessage()));
+        if (!properties.isFailOpen()) {
+          convertEventRepository.save(event);
+          throw new ResponseStatusException(
+              HttpStatus.BAD_GATEWAY, "ERP convert failed: " + event.getErrorMessage());
+        }
       }
     }
 
@@ -208,6 +224,33 @@ public class LeadConvertService {
     return url != null && url.contains("/adapters/erp/");
   }
 
+  /**
+   * Shop customer rows use a numeric tenant. CRM leads stay keyed by the shop code, so that code
+   * is never sent as {@code X-Tenant-Id} on this call.
+   */
+  private String outboundTenantId(String target, String crmTenantId) {
+    if (!"SHOP_CUSTOMER".equals(target)) {
+      return crmTenantId;
+    }
+    Long fromJwt = TenantContextFilter.getCurrentJwtTenantId();
+    if (fromJwt != null && fromJwt > 0) {
+      return Long.toString(fromJwt);
+    }
+    return positiveLongText(crmTenantId);
+  }
+
+  private static String positiveLongText(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    try {
+      long parsed = Long.parseLong(value.trim());
+      return parsed > 0 ? Long.toString(parsed) : null;
+    } catch (NumberFormatException ex) {
+      return null;
+    }
+  }
+
   private String resolveShopId(String tenantId) {
     if (properties.getShopId() != null && !properties.getShopId().isBlank()) {
       return properties.getShopId().trim();
@@ -234,6 +277,18 @@ public class LeadConvertService {
     }
     lead.touch();
     leadRepository.save(lead);
+    if ("SHOP_CUSTOMER".equals(target) && lead.getAccountId() != null && event.getExternalId() != null) {
+      try {
+        Long shopCustomerId = Long.parseLong(String.valueOf(event.getExternalId()).trim());
+        erpFederationService.stampShopCustomerOnAccount(lead.getAccountId(), shopCustomerId);
+      } catch (NumberFormatException ignored) {
+        // non-numeric sink ids are fine to skip
+      }
+    }
+  }
+
+  private boolean liveConvertAllowed() {
+    return entitlementGuard.convertAllowed(properties.isEnabled());
   }
 
   private Map<String, Object> toResponse(
@@ -248,7 +303,7 @@ public class LeadConvertService {
     m.put("request", e.getRequestJson());
     m.put("response", e.getResponseJson());
     m.put("alreadyConverted", alreadyConverted);
-    m.put("convertEnabled", properties.isEnabled());
+    m.put("convertEnabled", liveConvertAllowed());
     m.put("mode", mode);
     return m;
   }

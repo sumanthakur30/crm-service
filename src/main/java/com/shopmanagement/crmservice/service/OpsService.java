@@ -2,9 +2,12 @@ package com.shopmanagement.crmservice.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DateTimeException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +37,18 @@ import com.shopmanagement.crmservice.support.TenantIds;
 public class OpsService {
 
   private static final Pattern PERIOD_YM = Pattern.compile("^[0-9]{4}-[0-9]{2}$");
+
+  /** ISO-8601 instant. A blank or unparseable time is rejected before a meeting is saved. */
+  static Instant parseMeetingInstant(Object raw) {
+    if (raw == null || String.valueOf(raw).isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting time is required");
+    }
+    try {
+      return Instant.parse(String.valueOf(raw).trim());
+    } catch (DateTimeException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting time must be an instant");
+    }
+  }
 
   private final CrmCalendarEventRepository calendarRepository;
   private final CrmCallLogRepository callLogRepository;
@@ -71,9 +86,12 @@ public class OpsService {
     e.setRelatedType(req(body, "relatedType").toUpperCase(Locale.ROOT));
     e.setRelatedId(asLong(body.get("relatedId")));
     e.setTitle(req(body, "title"));
-    e.setStartsAt(Instant.parse(String.valueOf(body.get("startsAt"))));
-    if (body.get("endsAt") != null) {
-      e.setEndsAt(Instant.parse(String.valueOf(body.get("endsAt"))));
+    Instant startsAt = parseMeetingInstant(body.get("startsAt"));
+    e.setStartsAt(startsAt);
+    if (body.get("endsAt") == null || String.valueOf(body.get("endsAt")).isBlank()) {
+      e.setEndsAt(startsAt.plus(30, ChronoUnit.MINUTES));
+    } else {
+      e.setEndsAt(parseMeetingInstant(body.get("endsAt")));
     }
     e.setOwnerUserId(str(body.get("ownerUserId")));
     e.setLocation(str(body.get("location")));
@@ -91,6 +109,60 @@ public class OpsService {
     return toCal(e);
   }
 
+  @Transactional
+  public Map<String, Object> rescheduleCalendarEvent(Long id, Object startsAtRaw) {
+    Instant startsAt = parseMeetingInstant(startsAtRaw);
+    CrmCalendarEventEntity event = openMeeting(id);
+    Instant previousStart = event.getStartsAt();
+    Instant previousEnd = event.getEndsAt();
+    event.setStartsAt(startsAt);
+    event.setEndsAt(movedEnd(previousStart, previousEnd, startsAt));
+    event.touch();
+    event = calendarRepository.save(event);
+    timelineService.recordEvent(
+        event.getRelatedType(),
+        event.getRelatedId(),
+        "MEETING_MOVED",
+        "Meeting moved: " + event.getTitle(),
+        Map.of("calendarEventId", event.getId(), "startsAt", startsAt.toString()));
+    return toCal(event);
+  }
+
+  @Transactional
+  public Map<String, Object> cancelCalendarEvent(Long id) {
+    CrmCalendarEventEntity event = openMeeting(id);
+    event.setStatus("CANCELLED");
+    event.touch();
+    event = calendarRepository.save(event);
+    timelineService.recordEvent(
+        event.getRelatedType(),
+        event.getRelatedId(),
+        "MEETING_CANCELLED",
+        "Meeting cancelled: " + event.getTitle(),
+        Map.of("calendarEventId", event.getId()));
+    return toCal(event);
+  }
+
+  private CrmCalendarEventEntity openMeeting(Long id) {
+    CrmCalendarEventEntity event =
+        calendarRepository
+            .findByTenantIdAndIdAndDeletedAtIsNull(TenantIds.require(), id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meeting not found"));
+    if ("CANCELLED".equalsIgnoreCase(event.getStatus())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Meeting is already cancelled");
+    }
+    return event;
+  }
+
+  /** Keeps the booked length. A meeting with no end stays thirty minutes. */
+  static Instant movedEnd(Instant previousStart, Instant previousEnd, Instant newStart) {
+    Duration length = Duration.ofMinutes(30);
+    if (previousStart != null && previousEnd != null && previousEnd.isAfter(previousStart)) {
+      length = Duration.between(previousStart, previousEnd);
+    }
+    return newStart.plus(length);
+  }
+
   @Transactional(readOnly = true)
   public List<Map<String, Object>> listCalendar(Instant from) {
     Instant start = from == null ? Instant.now().minusSeconds(86400) : from;
@@ -98,6 +170,7 @@ public class OpsService {
         .findByTenantIdAndStartsAtGreaterThanEqualAndDeletedAtIsNullOrderByStartsAtAsc(
             TenantIds.require(), start)
         .stream()
+        .filter(event -> event.getStatus() == null || !"CANCELLED".equalsIgnoreCase(event.getStatus()))
         .map(OpsService::toCal)
         .toList();
   }
@@ -107,8 +180,19 @@ public class OpsService {
     String tenantId = TenantIds.require();
     CrmCallLogEntity call = new CrmCallLogEntity();
     call.setTenantId(tenantId);
-    Long leadId = body.get("leadId") == null ? null : asLong(body.get("leadId"));
+    Long leadId = optionalLong(body.get("leadId"));
+    Long opportunityId = optionalLong(body.get("opportunityId"));
+    if (leadId == null && opportunityId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A lead or a deal is required");
+    }
+    if (opportunityId != null
+        && opportunityRepository
+            .findByTenantIdAndIdAndDeletedAtIsNull(tenantId, opportunityId)
+            .isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal not found");
+    }
     call.setLeadId(leadId);
+    call.setOpportunityId(opportunityId);
     call.setDirection(
         body.get("direction") == null
             ? "OUTBOUND"
@@ -123,18 +207,28 @@ public class OpsService {
       call.setOccurredAt(Instant.parse(String.valueOf(body.get("occurredAt"))));
     }
     call = callLogRepository.save(call);
+    String summary =
+        "Call " + call.getDirection() + " · " + (call.getOutcome() == null ? "-" : call.getOutcome());
+    Map<String, Object> payload = Map.of("callId", call.getId());
+    if (opportunityId != null) {
+      timelineService.recordEvent("OPPORTUNITY", opportunityId, "CALL_LOGGED", summary, payload);
+    }
     if (leadId != null) {
-      timelineService.recordEvent(
-          "LEAD",
-          leadId,
-          "CALL_LOGGED",
-          "Call " + call.getDirection() + " · " + (call.getOutcome() == null ? "-" : call.getOutcome()),
-          Map.of("callId", call.getId()));
+      timelineService.recordEvent("LEAD", leadId, "CALL_LOGGED", summary, payload);
       if ("CONNECTED".equalsIgnoreCase(call.getOutcome()) || call.getDurationSec() > 0) {
-        scoringService.applyEvent(leadId, "CALL_CONNECTED", "Call connected", Map.of("callId", call.getId()));
+        scoringService.applyEvent(leadId, "CALL_CONNECTED", "Call connected", payload);
       }
     }
     return toCall(call);
+  }
+
+  /** A deal call shows on the deal. A lead-only call stays on the lead. */
+  static String callActivityType(Long leadId, Long opportunityId) {
+    return opportunityId != null ? "OPPORTUNITY" : "LEAD";
+  }
+
+  static Long callActivityId(Long leadId, Long opportunityId) {
+    return opportunityId != null ? opportunityId : leadId;
   }
 
   @Transactional(readOnly = true)
@@ -200,7 +294,7 @@ public class OpsService {
     String period = normalizePeriod(periodYm);
     List<CrmOpportunityEntity> open =
         opportunityRepository
-            .search(tenantId, "OPEN", null, null, PageRequest.of(0, 500))
+            .search(tenantId, "OPEN", null, null, "ORG", null, List.of("__NONE__"), PageRequest.of(0, 500))
             .getContent();
     BigDecimal weighted = BigDecimal.ZERO;
     BigDecimal pipeline = BigDecimal.ZERO;
@@ -235,6 +329,7 @@ public class OpsService {
     collaborative.put("pipelineWeighted", weighted);
     collaborative.put("commitTotal", commitTotal);
     collaborative.put("combined", weighted.add(commitTotal));
+    collaborative.put("gapCommitVsWeighted", commitTotal.subtract(weighted));
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("openCount", open.size());
@@ -245,7 +340,13 @@ public class OpsService {
     out.put("periodYm", period);
     out.put("commits", commitRows);
     out.put("commitTotal", commitTotal);
+    out.put("gapCommitVsWeighted", commitTotal.subtract(weighted));
     out.put("collaborative", collaborative);
+    out.put(
+        "managerHint",
+        commitTotal.compareTo(weighted) >= 0
+            ? "Commits at/above weighted pipeline"
+            : "Commits below weighted pipeline — review gaps");
     return out;
   }
 
@@ -315,6 +416,7 @@ public class OpsService {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("id", c.getId());
     m.put("leadId", c.getLeadId());
+    m.put("opportunityId", c.getOpportunityId());
     m.put("direction", c.getDirection());
     m.put("phone", c.getPhone());
     m.put("durationSec", c.getDurationSec());
@@ -347,6 +449,16 @@ public class OpsService {
 
   private static String str(Object v) {
     return v == null || String.valueOf(v).isBlank() ? null : String.valueOf(v).trim();
+  }
+
+  private static Long optionalLong(Object v) {
+    if (v == null || String.valueOf(v).isBlank()) {
+      return null;
+    }
+    if (v instanceof Number number) {
+      return number.longValue();
+    }
+    return Long.valueOf(String.valueOf(v).trim());
   }
 
   private static Long asLong(Object v) {

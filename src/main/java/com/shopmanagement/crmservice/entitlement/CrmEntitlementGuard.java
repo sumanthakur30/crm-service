@@ -59,6 +59,31 @@ public class CrmEntitlementGuard {
     requireSubFlag(properties.getApiFlag(), "assign crm-professional or higher for CRM API / ingest");
   }
 
+  /**
+   * Live lead convert. The ops switch still forces it on. Otherwise the shop plan must include
+   * FEATURE_CRM_CONVERT. A missing tenant or a subscription outage keeps convert off.
+   */
+  public boolean convertAllowed(boolean opsSwitchOn) {
+    if (opsSwitchOn) {
+      return true;
+    }
+    String tenantId;
+    try {
+      tenantId = TenantIds.require();
+    } catch (RuntimeException ex) {
+      return false;
+    }
+    try {
+      String flag = properties.getConvertFlag();
+      if (flag == null || flag.isBlank()) {
+        return false;
+      }
+      return client.hasFeature(tenantId, flag.trim());
+    } catch (RuntimeException ex) {
+      return false;
+    }
+  }
+
   /** Cases APIs — FEATURE_CRM + FEATURE_CRM_CASES (enterprise). */
   public void requireCasesAccess() {
     requireCrmAccess();
@@ -108,6 +133,10 @@ public class CrmEntitlementGuard {
 
     Map<String, Boolean> modules = new LinkedHashMap<>();
     modules.put("leads", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("deals", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("accounts", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("insights", Boolean.TRUE.equals(features.get(properties.getFlag())));
+    modules.put("home", Boolean.TRUE.equals(features.get(properties.getFlag())));
     modules.put("quotes", Boolean.TRUE.equals(features.get(properties.getQuoteFlag())));
     modules.put("campaigns", Boolean.TRUE.equals(features.get(properties.getCampaignFlag())));
     modules.put("ai", Boolean.TRUE.equals(features.get(properties.getAiFlag())));
@@ -121,6 +150,11 @@ public class CrmEntitlementGuard {
     out.put("checksEnabled", checksOn);
     out.put("features", features);
     out.put("modules", modules);
+    out.put(
+        "recordScope",
+        Map.of(
+            "note",
+            "OWN/TEAM/ORG via crm.security.record-scope-enabled + X-Crm-Access-Scope / X-Auth-Role"));
     return out;
   }
 
