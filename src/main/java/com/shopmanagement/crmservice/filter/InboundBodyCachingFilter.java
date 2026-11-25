@@ -22,11 +22,12 @@ import jakarta.servlet.http.HttpServletResponse;
 public class InboundBodyCachingFilter extends OncePerRequestFilter {
 
   static final String ADAPTER_PREFIX = "/api/v1/crm/public/adapters/";
+  static final String META_WEBHOOK = "/api/v1/crm/public/webhooks/meta";
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String uri = request.getRequestURI();
-    return uri == null || !uri.startsWith(ADAPTER_PREFIX);
+    return uri == null || !(uri.startsWith(ADAPTER_PREFIX) || uri.startsWith(META_WEBHOOK));
   }
 
   @Override

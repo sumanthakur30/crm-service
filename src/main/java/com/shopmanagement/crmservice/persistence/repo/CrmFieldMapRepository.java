@@ -10,5 +10,9 @@ public interface CrmFieldMapRepository extends JpaRepository<CrmFieldMapEntity, 
 
   List<CrmFieldMapEntity> findByFormIdOrderByIdAsc(Long formId);
 
+  List<CrmFieldMapEntity> findByAssetIdOrderByIdAsc(Long assetId);
+
   void deleteByFormId(Long formId);
+
+  void deleteByAssetId(Long assetId);
 }

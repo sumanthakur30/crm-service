@@ -39,6 +39,9 @@ public class CaptureJobService {
     List<CrmJobEntity> due =
         jobRepository.findByStatusAndRunAtLessThanEqual("PENDING", Instant.now(), PageRequest.of(0, 20));
     for (CrmJobEntity job : due) {
+      if ("META_LEAD_FETCH".equals(job.getJobType())) {
+        continue;
+      }
       job.setAttempts(job.getAttempts() + 1);
       job.setStatus("FAILED");
       job.setLockedAt(null);

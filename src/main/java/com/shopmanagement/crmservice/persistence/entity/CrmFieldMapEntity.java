@@ -22,8 +22,11 @@ public class CrmFieldMapEntity {
   @Column(name = "tenant_id", nullable = false, length = 64)
   private String tenantId;
 
-  @Column(name = "form_id", nullable = false)
+  @Column(name = "form_id")
   private Long formId;
+
+  @Column(name = "asset_id")
+  private Long assetId;
 
   @Column(name = "external_key", nullable = false, length = 128)
   private String externalKey;

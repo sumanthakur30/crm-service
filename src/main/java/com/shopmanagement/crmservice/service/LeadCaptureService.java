@@ -255,7 +255,24 @@ public class LeadCaptureService {
     String utmCampaign = repeat && body != null ? body.utmCampaign() : lead.getUtmCampaign();
     String utmContent = repeat && body != null ? body.utmContent() : lead.getUtmContent();
     String utmTerm = repeat && body != null ? body.utmTerm() : lead.getUtmTerm();
-    if (blank(utmSource) && blank(utmMedium) && blank(utmCampaign) && blank(utmContent) && blank(utmTerm)) {
+    Map<String, Object> refs = body == null ? null : body.externalRefs();
+    String pageId = ref(refs, "pageExternalId");
+    String formId = ref(refs, "formExternalId");
+    String campaignExternalId = ref(refs, "campaignExternalId");
+    String campaignName = ref(refs, "campaignName");
+    String adId = ref(refs, "adExternalId");
+    String adName = ref(refs, "adName");
+    String adsetId = ref(refs, "adsetExternalId");
+    String adsetName = ref(refs, "adsetName");
+    String instagramActorId = ref(refs, "instagramActorId");
+    if (blank(utmSource)
+        && blank(utmMedium)
+        && blank(utmCampaign)
+        && blank(utmContent)
+        && blank(utmTerm)
+        && pageId == null
+        && instagramActorId == null
+        && formId == null) {
       return;
     }
     CrmAttributionEntity row = new CrmAttributionEntity();
@@ -265,7 +282,24 @@ public class LeadCaptureService {
     row.setUtmCampaign(trim(utmCampaign));
     row.setUtmContent(trim(utmContent));
     row.setUtmTerm(trim(utmTerm));
+    row.setPageExternalId(pageId);
+    row.setFormExternalId(formId);
+    row.setCampaignExternalId(campaignExternalId);
+    row.setCampaignName(campaignName);
+    row.setAdExternalId(adId);
+    row.setAdName(adName);
+    row.setAdsetExternalId(adsetId);
+    row.setAdsetName(adsetName);
+    row.setInstagramActorId(instagramActorId);
     attributionRepository.save(row);
+  }
+
+  private static String ref(Map<String, Object> refs, String key) {
+    if (refs == null || refs.get(key) == null) {
+      return null;
+    }
+    String text = String.valueOf(refs.get(key)).trim();
+    return text.isEmpty() ? null : text;
   }
 
   private boolean educationTenant(String tenantId) {

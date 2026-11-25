@@ -11,8 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.shopmanagement.crmservice.api.CrmIntegrationApi.IntegrationCard;
 import com.shopmanagement.crmservice.persistence.entity.CrmInboundEventEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmIntegrationAssetEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmIntegrationEntity;
 import com.shopmanagement.crmservice.persistence.entity.CrmWebFormEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmInboundEventRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmIntegrationAssetRepository;
+import com.shopmanagement.crmservice.persistence.repo.CrmIntegrationRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmTouchRepository;
 import com.shopmanagement.crmservice.persistence.repo.CrmWebFormRepository;
 import com.shopmanagement.crmservice.support.TenantIds;
@@ -24,14 +28,20 @@ public class IntegrationQueryService {
   private final CrmWebFormRepository formRepository;
   private final CrmInboundEventRepository inboundRepository;
   private final CrmTouchRepository touchRepository;
+  private final CrmIntegrationRepository integrationRepository;
+  private final CrmIntegrationAssetRepository assetRepository;
 
   public IntegrationQueryService(
       CrmWebFormRepository formRepository,
       CrmInboundEventRepository inboundRepository,
-      CrmTouchRepository touchRepository) {
+      CrmTouchRepository touchRepository,
+      CrmIntegrationRepository integrationRepository,
+      CrmIntegrationAssetRepository assetRepository) {
     this.formRepository = formRepository;
     this.inboundRepository = inboundRepository;
     this.touchRepository = touchRepository;
+    this.integrationRepository = integrationRepository;
+    this.assetRepository = assetRepository;
   }
 
   @Transactional(readOnly = true)
@@ -75,7 +85,7 @@ public class IntegrationQueryService {
             webFailed,
             lastError,
             forms.isEmpty() ? "Add a form" : "Add another form"));
-    cards.add(disconnected("META", "Facebook Lead Ads", "Not connected. A page is not receiving lead ads."));
+    cards.add(metaCard(tenantId, since));
     cards.add(
         disconnected(
             "GOOGLE_ADS",
@@ -102,6 +112,47 @@ public class IntegrationQueryService {
             null,
             "Open the wizard"));
     return cards;
+  }
+
+  private IntegrationCard metaCard(String tenantId, Instant since) {
+    CrmIntegrationEntity integration =
+        integrationRepository.findByTenantIdAndProviderAndDeletedAtIsNull(tenantId, "META").orElse(null);
+    if (integration == null || "DISCONNECTED".equals(integration.getStatus())) {
+      return disconnected("META", "Facebook Lead Ads", "Not connected. A page is not receiving lead ads.");
+    }
+    ArrayList<String> names = new ArrayList<>();
+    int selected = 0;
+    for (CrmIntegrationAssetEntity asset :
+        assetRepository.findByIntegrationIdOrderByAssetTypeAscNameAsc(integration.getId())) {
+      if (!asset.isSelected() || (!"PAGE".equals(asset.getAssetType()) && !"FORM".equals(asset.getAssetType()))) {
+        continue;
+      }
+      selected++;
+      if (names.size() < 8 && asset.getName() != null) {
+        names.add(asset.getName());
+      }
+    }
+    long leads = touchRepository.countByTenantIdAndProviderAndReceivedAtAfter(tenantId, "META", since);
+    long failed = inboundRepository.countFailedSince(tenantId, "META", since);
+    boolean arrived = integration.getLastSuccessAt() != null && "CONNECTED".equals(integration.getStatus());
+    String summary =
+        "ERROR".equals(integration.getStatus())
+            ? "Reconnect Facebook. The page token is no longer valid."
+            : arrived
+                ? "A Facebook lead has arrived. Live pages stay off until Meta approves the app."
+                : "Facebook is linked. A test lead has not arrived yet. Live pages stay off until Meta approves the app.";
+    return new IntegrationCard(
+        "META",
+        integration.getStatus(),
+        "Facebook Lead Ads",
+        summary,
+        selected,
+        names,
+        integration.getLastSuccessAt(),
+        leads,
+        failed,
+        integration.getLastError(),
+        "ERROR".equals(integration.getStatus()) ? "Reconnect" : "Open Facebook");
   }
 
   private static IntegrationCard disconnected(String provider, String name, String summary) {

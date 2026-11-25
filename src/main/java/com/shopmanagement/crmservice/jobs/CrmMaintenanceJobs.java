@@ -7,6 +7,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
+import com.shopmanagement.crmservice.integration.meta.MetaLeadFetchService;
+import com.shopmanagement.crmservice.integration.meta.MetaTokenCheckService;
 import com.shopmanagement.crmservice.persistence.repo.CrmWorkspaceRepository;
 import com.shopmanagement.crmservice.service.CaptureJobService;
 import com.shopmanagement.crmservice.service.LeadCaptureService;
@@ -27,6 +29,8 @@ public class CrmMaintenanceJobs {
   private final ReportAclService reportAclService;
   private final LeadCaptureService leadCaptureService;
   private final CaptureJobService captureJobService;
+  private final MetaTokenCheckService metaTokenCheckService;
+  private final MetaLeadFetchService metaLeadFetchService;
 
   public CrmMaintenanceJobs(
       CrmWorkspaceRepository workspaceRepository,
@@ -34,17 +38,31 @@ public class CrmMaintenanceJobs {
       SlaTaskService slaTaskService,
       ReportAclService reportAclService,
       LeadCaptureService leadCaptureService,
-      CaptureJobService captureJobService) {
+      CaptureJobService captureJobService,
+      MetaTokenCheckService metaTokenCheckService,
+      MetaLeadFetchService metaLeadFetchService) {
     this.workspaceRepository = workspaceRepository;
     this.sequenceService = sequenceService;
     this.slaTaskService = slaTaskService;
     this.reportAclService = reportAclService;
     this.leadCaptureService = leadCaptureService;
     this.captureJobService = captureJobService;
+    this.metaTokenCheckService = metaTokenCheckService;
+    this.metaLeadFetchService = metaLeadFetchService;
   }
 
   @Scheduled(fixedDelayString = "${crm.jobs.fixed-delay-ms:60000}")
   public void runDueWork() {
+    try {
+      metaTokenCheckService.checkDue();
+    } catch (RuntimeException ex) {
+      log.warn("CRM Facebook token check failed: {}", ex.getMessage());
+    }
+    try {
+      metaLeadFetchService.processDue();
+    } catch (RuntimeException ex) {
+      log.warn("CRM Facebook lead fetch failed: {}", ex.getMessage());
+    }
     try {
       captureJobService.processDue();
     } catch (RuntimeException ex) {
