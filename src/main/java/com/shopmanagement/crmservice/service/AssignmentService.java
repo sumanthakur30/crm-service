@@ -100,6 +100,22 @@ public class AssignmentService {
   }
 
   @Transactional
+  public int bulkAssign(java.util.List<Long> leadIds, AssignRequest request) {
+    if (leadIds == null || leadIds.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one lead");
+    }
+    int assigned = 0;
+    for (Long leadId : leadIds) {
+      if (leadId == null) {
+        continue;
+      }
+      assign(leadId, request == null ? new AssignRequest("ROUND_ROBIN", null, null) : request);
+      assigned++;
+    }
+    return assigned;
+  }
+
+  @Transactional
   public LeadResponse assign(Long leadId, AssignRequest body) {
     String tenantId = TenantIds.require();
     CrmLeadEntity lead =

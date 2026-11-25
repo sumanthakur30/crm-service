@@ -18,6 +18,9 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
 
   List<CrmLeadEntity> findByTenantIdAndDeletedAtIsNull(String tenantId);
 
+  List<CrmLeadEntity> findByTenantIdAndContactIdIsNullAndDeletedAtIsNull(
+      String tenantId, Pageable pageable);
+
   List<CrmLeadEntity> findByTenantIdAndPhoneAndDeletedAtIsNull(String tenantId, String phone);
 
   List<CrmLeadEntity> findByTenantIdAndEmailAndDeletedAtIsNull(String tenantId, String email);
@@ -78,6 +81,42 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
         AND (:stageId IS NULL OR l.stageId = :stageId)
         AND (:pipelineId IS NULL OR l.pipelineId = :pipelineId)
         AND (:ownerUserId IS NULL OR l.ownerUserId = :ownerUserId)
+        AND (:sourceCode IS NULL OR :sourceCode = '' OR l.sourceCode = :sourceCode)
+        AND (
+          :unassignedOnly IS NULL OR :unassignedOnly = '' OR :unassignedOnly = 'false'
+          OR l.ownerUserId IS NULL OR l.ownerUserId = ''
+        )
+        AND (
+          :followUp IS NULL OR :followUp = ''
+          OR (
+            :followUp = 'NONE'
+            AND function('jsonb_extract_path_text', l.attributes, 'profile', 'nextFollowUpDate') IS NULL
+          )
+          OR (
+            :followUp = 'DUE_TODAY'
+            AND function('jsonb_extract_path_text', l.attributes, 'profile', 'nextFollowUpDate') = :today
+          )
+          OR (
+            :followUp = 'OVERDUE'
+            AND function('jsonb_extract_path_text', l.attributes, 'profile', 'nextFollowUpDate') IS NOT NULL
+            AND function('jsonb_extract_path_text', l.attributes, 'profile', 'nextFollowUpDate') < :today
+          )
+        )
+        AND (
+          :course IS NULL OR :course = ''
+          OR LOWER(COALESCE(function('jsonb_extract_path_text', l.attributes, 'course'), '')) = LOWER(:course)
+          OR EXISTS (
+            SELECT v.id FROM CrmFieldValueEntity v, CrmFieldDefEntity d
+            WHERE v.fieldDefId = d.id
+              AND v.tenantId = l.tenantId
+              AND v.objectType = 'LEAD'
+              AND v.objectId = l.id
+              AND v.deletedAt IS NULL
+              AND d.deletedAt IS NULL
+              AND d.code = 'course'
+              AND LOWER(COALESCE(v.valueText, '')) = LOWER(:course)
+          )
+        )
         AND (
           :scopeMode IS NULL OR :scopeMode = 'ORG'
           OR (
@@ -105,6 +144,11 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
       @Param("stageId") Long stageId,
       @Param("pipelineId") Long pipelineId,
       @Param("ownerUserId") String ownerUserId,
+      @Param("sourceCode") String sourceCode,
+      @Param("unassignedOnly") String unassignedOnly,
+      @Param("followUp") String followUp,
+      @Param("today") String today,
+      @Param("course") String course,
       @Param("q") String q,
       @Param("scopeMode") String scopeMode,
       @Param("scopeUserId") String scopeUserId,

@@ -3,6 +3,7 @@ package com.shopmanagement.crmservice.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,6 +48,7 @@ class CrmLeadServiceTest {
   @Mock private LeadIdentityService leadIdentityService;
   @Mock private ObjectProvider<AssignmentService> assignmentProvider;
   @Mock private AssignmentService assignmentService;
+  @Mock private LeadCaptureService leadCaptureService;
 
   private CrmLeadService leadService;
 
@@ -68,7 +70,8 @@ class CrmLeadServiceTest {
             scoreBandService,
             followUpTaskService,
             leadIdentityService,
-            assignmentProvider);
+            assignmentProvider,
+            leadCaptureService);
     lenient().when(leadIdentityService.findOpenMatch(any(), any(), any())).thenReturn(Optional.empty());
     lenient().when(assignmentProvider.getObject()).thenReturn(assignmentService);
     lenient().when(assignmentService.tryRoundRobin(anyLong())).thenReturn(null);
@@ -144,6 +147,7 @@ class CrmLeadServiceTest {
     verify(leadRepository).save(captor.capture());
     assertThat(captor.getValue().getTenantId()).isEqualTo("tenant-demo");
     assertThat(captor.getValue().getOwnerUserId()).isNull();
+    verify(leadCaptureService).recordNew(any(), any());
   }
 
   @Test
@@ -189,6 +193,8 @@ class CrmLeadServiceTest {
     assertThat(response.id()).isEqualTo(7L);
     verify(leadRepository, never()).save(any());
     verify(assignmentService, never()).tryRoundRobin(anyLong());
+    verify(leadCaptureService).recordRepeat(eq(existing), any());
+    verify(leadCaptureService, never()).recordNew(any(), any());
   }
 
   /** Tiny helper so test constructors stay readable. */

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.persistence.repo.CrmWorkspaceRepository;
+import com.shopmanagement.crmservice.service.LeadCaptureService;
 import com.shopmanagement.crmservice.service.ReportAclService;
 import com.shopmanagement.crmservice.service.SequenceService;
 import com.shopmanagement.crmservice.service.SlaTaskService;
@@ -23,16 +24,19 @@ public class CrmMaintenanceJobs {
   private final SequenceService sequenceService;
   private final SlaTaskService slaTaskService;
   private final ReportAclService reportAclService;
+  private final LeadCaptureService leadCaptureService;
 
   public CrmMaintenanceJobs(
       CrmWorkspaceRepository workspaceRepository,
       SequenceService sequenceService,
       SlaTaskService slaTaskService,
-      ReportAclService reportAclService) {
+      ReportAclService reportAclService,
+      LeadCaptureService leadCaptureService) {
     this.workspaceRepository = workspaceRepository;
     this.sequenceService = sequenceService;
     this.slaTaskService = slaTaskService;
     this.reportAclService = reportAclService;
+    this.leadCaptureService = leadCaptureService;
   }
 
   @Scheduled(fixedDelayString = "${crm.jobs.fixed-delay-ms:60000}")
@@ -46,6 +50,7 @@ public class CrmMaintenanceJobs {
         sequenceService.processDue(50);
         slaTaskService.processAging();
         reportAclService.runDueReports();
+        leadCaptureService.backfillIfEnabled(tenantId);
       } catch (RuntimeException ex) {
         log.warn("CRM maintenance failed for tenant {}: {}", tenantId, ex.getMessage());
       } finally {

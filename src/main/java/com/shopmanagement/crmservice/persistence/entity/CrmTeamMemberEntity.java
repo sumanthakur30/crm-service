@@ -42,4 +42,7 @@ public class CrmTeamMemberEntity extends TenantAuditableEntity {
 
   @Column(name = "open_lead_cap", nullable = false)
   private int openLeadCap;
+
+  @Column(name = "branch_id")
+  private Long branchId;
 }

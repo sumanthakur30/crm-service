@@ -40,6 +40,36 @@ public class CrmContactEntity extends TenantAuditableEntity {
   @Column(length = 128)
   private String title;
 
+  @Column(name = "first_name", length = 128)
+  private String firstName;
+
+  @Column(name = "last_name", length = 128)
+  private String lastName;
+
+  @Column(name = "phone_e164", length = 32)
+  private String phoneE164;
+
+  @Column(name = "phone_raw", length = 64)
+  private String phoneRaw;
+
+  @Column(name = "alternate_phone_e164", length = 32)
+  private String alternatePhoneE164;
+
+  @Column(name = "email_normalized", length = 256)
+  private String emailNormalized;
+
+  @Column(length = 128)
+  private String city;
+
+  @Column(name = "state_code", length = 8)
+  private String stateCode;
+
+  @Column(name = "contact_kind", nullable = false, length = 32)
+  private String contactKind = "OTHER";
+
+  @Column(name = "do_not_contact", nullable = false)
+  private boolean doNotContact;
+
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(nullable = false, columnDefinition = "jsonb")
   private Map<String, Object> attributes = new LinkedHashMap<>();

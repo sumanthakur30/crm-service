@@ -76,7 +76,13 @@ public final class CrmLeadApi {
       Long accountId,
       Long contactId,
       Instant createdAt,
-      Instant updatedAt) {}
+      Instant updatedAt,
+      Long branchId,
+      Instant firstResponseAt) {}
+
+  public record BulkAssignRequest(java.util.List<Long> leadIds, String mode, String ownerUserId, String teamId) {}
+
+  public record OutcomeRequest(String outcome, String note, String nextFollowUpDate, Long stageId) {}
 
   public record WorkspaceBootstrapRequest(
       @Size(max = 128) String name, @Size(max = 64) String templateCode) {}

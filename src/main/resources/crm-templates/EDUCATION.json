@@ -6,10 +6,10 @@
     "name": "Admission Inquiry",
     "stages": [
       { "code": "INQUIRY", "name": "Inquiry", "sortOrder": 10, "probability": 15 },
-      { "code": "COUNSELING", "name": "Counseling", "sortOrder": 20, "probability": 35 },
-      { "code": "APPLICATION", "name": "Application", "sortOrder": 30, "probability": 55 },
-      { "code": "FEE_QUOTE", "name": "Fee quote", "sortOrder": 40, "probability": 75 },
-      { "code": "ENROLLED", "name": "Enrolled", "sortOrder": 50, "probability": 100, "won": true },
+      { "code": "COUNSELING", "name": "Counseling", "sortOrder": 20, "probability": 35, "contacted": true },
+      { "code": "APPLICATION", "name": "Application", "sortOrder": 30, "probability": 55, "contacted": true, "application": true },
+      { "code": "FEE_QUOTE", "name": "Fee quote", "sortOrder": 40, "probability": 75, "contacted": true, "application": true, "qualified": true },
+      { "code": "ENROLLED", "name": "Enrolled", "sortOrder": 50, "probability": 100, "won": true, "contacted": true, "application": true, "qualified": true },
       { "code": "DROPPED", "name": "Dropped", "sortOrder": 60, "probability": 0, "lost": true }
     ]
   },

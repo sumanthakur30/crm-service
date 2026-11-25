@@ -34,4 +34,22 @@ public final class PhoneCandidates {
     }
     return List.copyOf(new ArrayList<>(out));
   }
+
+  /** India default: a 10-digit number becomes +91. Longer digit strings keep a leading plus. */
+  public static String e164(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    String digits = raw.replaceAll("\\D", "");
+    if (digits.length() == 10) {
+      return "+91" + digits;
+    }
+    if (digits.length() == 12 && digits.startsWith("91")) {
+      return "+" + digits;
+    }
+    if (digits.length() >= 8 && digits.length() <= 15) {
+      return "+" + digits;
+    }
+    return null;
+  }
 }

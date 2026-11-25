@@ -13,5 +13,7 @@ public interface CrmContactRepository extends JpaRepository<CrmContactEntity, Lo
 
   Optional<CrmContactEntity> findByTenantIdAndIdAndDeletedAtIsNull(String tenantId, Long id);
 
+  Optional<CrmContactEntity> findByTenantIdAndPhoneE164AndDeletedAtIsNull(String tenantId, String phoneE164);
+
   List<CrmContactEntity> findByTenantIdAndAccountIdAndDeletedAtIsNull(String tenantId, Long accountId);
 }

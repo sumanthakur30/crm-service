@@ -52,6 +52,7 @@ public class CrmLeadService {
   private final FollowUpTaskService followUpTaskService;
   private final LeadIdentityService leadIdentityService;
   private final ObjectProvider<AssignmentService> assignmentService;
+  private final LeadCaptureService leadCaptureService;
 
   public CrmLeadService(
       CrmLeadRepository leadRepository,
@@ -67,7 +68,8 @@ public class CrmLeadService {
       ScoreBandService scoreBandService,
       FollowUpTaskService followUpTaskService,
       LeadIdentityService leadIdentityService,
-      ObjectProvider<AssignmentService> assignmentService) {
+      ObjectProvider<AssignmentService> assignmentService,
+      LeadCaptureService leadCaptureService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
@@ -82,6 +84,7 @@ public class CrmLeadService {
     this.followUpTaskService = followUpTaskService;
     this.leadIdentityService = leadIdentityService;
     this.assignmentService = assignmentService;
+    this.leadCaptureService = leadCaptureService;
   }
 
   @Transactional
@@ -110,6 +113,7 @@ public class CrmLeadService {
               "sourceCode", body.sourceCode() == null ? "" : body.sourceCode(),
               "phone", body.phone() == null ? "" : body.phone(),
               "email", body.email() == null ? "" : body.email()));
+      leadCaptureService.recordRepeat(match, body);
       return toResponse(match);
     }
     CrmPipelineEntity pipeline = resolvePipeline(tenantId, body.pipelineId());
@@ -126,6 +130,7 @@ public class CrmLeadService {
         "LEAD_CREATED",
         "Lead created: " + lead.getTitle(),
         Map.of("stageId", lead.getStageId(), "status", lead.getStatus()));
+    leadCaptureService.recordNew(lead, body);
     if (roundRobinIfUnowned && (lead.getOwnerUserId() == null || lead.getOwnerUserId().isBlank())) {
       LeadResponse assigned = assignmentService.getObject().tryRoundRobin(lead.getId());
       if (assigned != null) {
@@ -212,7 +217,16 @@ public class CrmLeadService {
 
   @Transactional(readOnly = true)
   public Page<LeadResponse> search(
-      String status, Long stageId, Long pipelineId, String ownerUserId, String q, Pageable pageable) {
+      String status,
+      Long stageId,
+      Long pipelineId,
+      String ownerUserId,
+      String sourceCode,
+      String unassignedOnly,
+      String followUp,
+      String course,
+      String q,
+      Pageable pageable) {
     String tenantId = TenantIds.require();
     String normalizedStatus = status == null || status.isBlank() ? null : normalizeStatus(status);
     var filter = recordScopeService.listFilter(ownerUserId);
@@ -226,6 +240,14 @@ public class CrmLeadService {
       scopeMode = "ORG";
       scopeUserId = null;
     }
+    String follow = blankToNull(followUp);
+    if (follow != null) {
+      follow = follow.toUpperCase(Locale.ROOT);
+      if (!follow.equals("NONE") && !follow.equals("DUE_TODAY") && !follow.equals("OVERDUE")) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "followUp must be DUE_TODAY, OVERDUE, or NONE");
+      }
+    }
     Map<String, Object> bands = scoreBandService.getOrEnsure();
     int hotMin = ((Number) bands.get("hotMin")).intValue();
     int warmMin = ((Number) bands.get("warmMin")).intValue();
@@ -236,6 +258,11 @@ public class CrmLeadService {
             stageId,
             pipelineId,
             filter.ownerUserId(),
+            blankToNull(sourceCode),
+            unassignedOnly,
+            follow,
+            java.time.LocalDate.now(MyDayService.ZONE).toString(),
+            blankToNull(course),
             q,
             scopeMode,
             scopeUserId,
@@ -438,6 +465,8 @@ public class CrmLeadService {
         lead.getAccountId(),
         lead.getContactId(),
         lead.getCreatedAt(),
-        lead.getUpdatedAt());
+        lead.getUpdatedAt(),
+        lead.getBranchId(),
+        lead.getFirstResponseAt());
   }
 }

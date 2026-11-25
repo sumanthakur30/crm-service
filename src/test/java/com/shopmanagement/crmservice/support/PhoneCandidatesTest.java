@@ -13,6 +13,11 @@ class PhoneCandidatesTest {
   }
 
   @Test
+  void tenDigitNumberBecomesIndiaE164() {
+    assertThat(PhoneCandidates.e164("99999 99999")).isEqualTo("+919999999999");
+  }
+
+  @Test
   void blankPhoneHasNoCandidates() {
     assertThat(PhoneCandidates.of("  ")).isEmpty();
   }

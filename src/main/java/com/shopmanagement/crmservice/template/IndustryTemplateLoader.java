@@ -86,7 +86,10 @@ public class IndustryTemplateLoader {
                 s.path("sortOrder").asInt(10),
                 s.path("probability").asInt(0),
                 s.path("won").asBoolean(false),
-                s.path("lost").asBoolean(false)));
+                s.path("lost").asBoolean(false),
+                s.path("contacted").asBoolean(false),
+                s.path("qualified").asBoolean(false),
+                s.path("application").asBoolean(false)));
       }
     }
     return new IndustryTemplate.PipelineSpec(

@@ -40,6 +40,15 @@ public class CrmStageEntity extends TenantAuditableEntity {
   @Column(name = "is_lost", nullable = false)
   private boolean lost;
 
+  @Column(name = "is_qualified", nullable = false)
+  private boolean qualified;
+
+  @Column(name = "is_contacted", nullable = false)
+  private boolean contacted;
+
+  @Column(name = "is_application", nullable = false)
+  private boolean application;
+
   @Column(nullable = false)
   private boolean active = true;
 }

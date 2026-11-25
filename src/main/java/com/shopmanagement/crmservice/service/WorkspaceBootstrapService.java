@@ -29,16 +29,19 @@ public class WorkspaceBootstrapService {
   private final CrmPipelineRepository pipelineRepository;
   private final CrmStageRepository stageRepository;
   private final IndustryTemplateLoader templateLoader;
+  private final EducationPackService educationPackService;
 
   public WorkspaceBootstrapService(
       CrmWorkspaceRepository workspaceRepository,
       CrmPipelineRepository pipelineRepository,
       CrmStageRepository stageRepository,
-      IndustryTemplateLoader templateLoader) {
+      IndustryTemplateLoader templateLoader,
+      EducationPackService educationPackService) {
     this.workspaceRepository = workspaceRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
     this.templateLoader = templateLoader;
+    this.educationPackService = educationPackService;
   }
 
   @Transactional
@@ -69,6 +72,7 @@ public class WorkspaceBootstrapService {
         .findByTenantIdAndCodeAndDeletedAtIsNull(tenantId, template.opportunityPipeline().code())
         .orElseGet(() -> createPipelineFromSpec(tenantId, template.opportunityPipeline(), "OPPORTUNITY", false, 20));
 
+    educationPackService.ensure(tenantId);
     return toResponse(workspace, leadPipeline.getId());
   }
 
@@ -201,7 +205,10 @@ public class WorkspaceBootstrapService {
           stage.sortOrder(),
           stage.probability(),
           stage.won(),
-          stage.lost());
+          stage.lost(),
+          stage.contacted(),
+          stage.qualified(),
+          stage.application());
     }
     return pipeline;
   }
@@ -214,7 +221,10 @@ public class WorkspaceBootstrapService {
       int sort,
       int probability,
       boolean won,
-      boolean lost) {
+      boolean lost,
+      boolean contacted,
+      boolean qualified,
+      boolean application) {
     CrmStageEntity stage = new CrmStageEntity();
     stage.setTenantId(tenantId);
     stage.setPipelineId(pipelineId);
@@ -224,6 +234,9 @@ public class WorkspaceBootstrapService {
     stage.setProbability(probability);
     stage.setWon(won);
     stage.setLost(lost);
+    stage.setContacted(contacted);
+    stage.setQualified(qualified);
+    stage.setApplication(application);
     stage.setActive(true);
     stageRepository.save(stage);
   }

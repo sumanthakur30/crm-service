@@ -11,5 +11,13 @@ public record IndustryTemplate(
   public record PipelineSpec(String code, String name, List<StageSpec> stages) {}
 
   public record StageSpec(
-      String code, String name, int sortOrder, int probability, boolean won, boolean lost) {}
+      String code,
+      String name,
+      int sortOrder,
+      int probability,
+      boolean won,
+      boolean lost,
+      boolean contacted,
+      boolean qualified,
+      boolean application) {}
 }

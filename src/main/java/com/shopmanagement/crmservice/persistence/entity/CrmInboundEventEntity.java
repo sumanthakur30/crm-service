@@ -56,4 +56,16 @@ public class CrmInboundEventEntity {
 
   @Column(name = "processed_at")
   private Instant processedAt;
+
+  @Column(name = "attempt_count", nullable = false)
+  private int attemptCount;
+
+  @Column(name = "next_attempt_at")
+  private Instant nextAttemptAt;
+
+  @Column(name = "signature_ok")
+  private Boolean signatureOk;
+
+  @Column(name = "branch_id")
+  private Long branchId;
 }

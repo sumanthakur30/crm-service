@@ -1,6 +1,7 @@
 package com.shopmanagement.crmservice.persistence.entity;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -114,4 +115,10 @@ public class CrmLeadEntity extends TenantAuditableEntity {
 
   @Column(name = "merged_into_lead_id")
   private Long mergedIntoLeadId;
+
+  @Column(name = "branch_id")
+  private Long branchId;
+
+  @Column(name = "first_response_at")
+  private Instant firstResponseAt;
 }

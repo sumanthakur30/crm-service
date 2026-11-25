@@ -18,8 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.shopmanagement.crmservice.api.CrmLeadApi.AssignRequest;
+import com.shopmanagement.crmservice.api.CrmLeadApi.BulkAssignRequest;
 import com.shopmanagement.crmservice.api.CrmLeadApi.ImportResult;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadResponse;
+import com.shopmanagement.crmservice.api.CrmLeadApi.OutcomeRequest;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadStatusPatch;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.api.CrmPartyConvertApi.ConvertToCrmRequest;
@@ -30,6 +32,7 @@ import com.shopmanagement.crmservice.service.CrmLeadService;
 import com.shopmanagement.crmservice.service.CrmPartyConvertService;
 import com.shopmanagement.crmservice.service.LeadConvertService;
 import com.shopmanagement.crmservice.service.LeadImportService;
+import com.shopmanagement.crmservice.service.LeadOutcomeService;
 import com.shopmanagement.crmservice.service.TimelineService;
 
 import jakarta.validation.Valid;
@@ -45,6 +48,7 @@ public class CrmLeadController {
   private final LeadConvertService leadConvertService;
   private final CrmPartyConvertService partyConvertService;
   private final CrmEntitlementGuard entitlementGuard;
+  private final LeadOutcomeService leadOutcomeService;
 
   public CrmLeadController(
       CrmLeadService leadService,
@@ -53,7 +57,8 @@ public class CrmLeadController {
       TimelineService timelineService,
       LeadConvertService leadConvertService,
       CrmPartyConvertService partyConvertService,
-      CrmEntitlementGuard entitlementGuard) {
+      CrmEntitlementGuard entitlementGuard,
+      LeadOutcomeService leadOutcomeService) {
     this.leadService = leadService;
     this.assignmentService = assignmentService;
     this.importService = importService;
@@ -61,6 +66,7 @@ public class CrmLeadController {
     this.leadConvertService = leadConvertService;
     this.partyConvertService = partyConvertService;
     this.entitlementGuard = entitlementGuard;
+    this.leadOutcomeService = leadOutcomeService;
   }
 
   @PostMapping
@@ -94,10 +100,37 @@ public class CrmLeadController {
       @RequestParam(required = false) Long stageId,
       @RequestParam(required = false) Long pipelineId,
       @RequestParam(required = false) String ownerUserId,
+      @RequestParam(required = false) String sourceCode,
+      @RequestParam(required = false) String followUp,
+      @RequestParam(required = false) String unassigned,
+      @RequestParam(required = false) String course,
       @RequestParam(required = false) String q,
       Pageable pageable) {
     entitlementGuard.requireCrmAccess();
-    return leadService.search(status, stageId, pipelineId, ownerUserId, q, pageable);
+    return leadService.search(
+        status, stageId, pipelineId, ownerUserId, sourceCode, unassigned, followUp, course, q, pageable);
+  }
+
+  @PostMapping("/bulk-assign")
+  public java.util.Map<String, Object> bulkAssign(@RequestBody BulkAssignRequest body) {
+    entitlementGuard.requireCrmAccess();
+    BulkAssignRequest request = body == null ? new BulkAssignRequest(java.util.List.of(), null, null, null) : body;
+    int assigned =
+        assignmentService.bulkAssign(
+            request.leadIds(),
+            new AssignRequest(
+                request.mode() == null ? "MANUAL" : request.mode(),
+                request.ownerUserId(),
+                request.teamId()));
+    return java.util.Map.of("assigned", assigned);
+  }
+
+  @PostMapping("/{id}/outcomes")
+  public LeadResponse logOutcome(@PathVariable Long id, @RequestBody OutcomeRequest body) {
+    entitlementGuard.requireCrmAccess();
+    OutcomeRequest request = body == null ? new OutcomeRequest(null, null, null, null) : body;
+    return leadOutcomeService.log(
+        id, request.outcome(), request.note(), request.nextFollowUpDate(), request.stageId());
   }
 
   @DeleteMapping("/{id}")
