@@ -9,4 +9,6 @@ import com.shopmanagement.crmservice.persistence.entity.CrmBranchEntity;
 public interface CrmBranchRepository extends JpaRepository<CrmBranchEntity, Long> {
 
   Optional<CrmBranchEntity> findByTenantIdAndCodeAndDeletedAtIsNull(String tenantId, String code);
+
+  Optional<CrmBranchEntity> findByTenantIdAndIdAndDeletedAtIsNull(String tenantId, Long id);
 }

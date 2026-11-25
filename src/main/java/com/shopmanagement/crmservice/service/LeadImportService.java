@@ -27,9 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.shopmanagement.crmservice.api.CrmLeadApi.ImportPreview;
 import com.shopmanagement.crmservice.api.CrmLeadApi.ImportResult;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
+import com.shopmanagement.crmservice.support.ImportColumns;
 import com.shopmanagement.crmservice.support.TenantIds;
 
 @Service
@@ -56,18 +58,57 @@ public class LeadImportService {
     if (file == null || file.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is required");
     }
+    return importRows(loadRows(file), assignRoundRobin, teamId);
+  }
+
+  @Transactional(readOnly = true)
+  public ImportPreview preview(MultipartFile file) {
+    entitlementGuard.requireCrmAccess();
+    List<Map<String, String>> rows = loadRows(file);
+    List<String> headers = rows.isEmpty() ? List.of() : new ArrayList<>(rows.get(0).keySet());
+    Map<String, String> suggested = new LinkedHashMap<>();
+    for (String header : headers) {
+      suggested.put(header, ImportColumns.suggest(header));
+    }
+    List<String> errors = new ArrayList<>();
+    for (int i = 0; i < rows.size() && errors.size() < 50; i++) {
+      String title = mapped(rows.get(i), suggested, "title");
+      String phone = mapped(rows.get(i), suggested, "phone");
+      String email = mapped(rows.get(i), suggested, "email");
+      if (title == null) {
+        errors.add("row " + (i + 2) + ": missing name");
+      } else if (phone == null && email == null) {
+        errors.add("row " + (i + 2) + ": missing mobile and email");
+      }
+    }
+    List<Map<String, String>> sample = rows.subList(0, Math.min(5, rows.size()));
+    return new ImportPreview(headers, suggested, rows.size(), sample, errors);
+  }
+
+  @Transactional
+  public ImportResult importMapped(
+      MultipartFile file, boolean assignRoundRobin, String teamId, Map<String, String> columnMap) {
+    entitlementGuard.requireCrmAccess();
+    List<Map<String, String>> rows = loadRows(file);
+    if (columnMap == null || columnMap.isEmpty()) {
+      return importRows(rows, assignRoundRobin, teamId);
+    }
+    return importMappedRows(rows, assignRoundRobin, teamId, columnMap);
+  }
+
+  private List<Map<String, String>> loadRows(MultipartFile file) {
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is required");
+    }
     String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase(Locale.ROOT);
     try {
-      List<Map<String, String>> rows;
       if (name.endsWith(".xlsx")) {
-        rows = parseXlsx(file.getInputStream());
-      } else if (name.endsWith(".csv") || name.endsWith(".txt") || name.isBlank()) {
-        rows = parseCsv(file.getInputStream());
-      } else {
-        throw new ResponseStatusException(
-            HttpStatus.BAD_REQUEST, "Unsupported file type. Use .csv or .xlsx");
+        return parseXlsx(file.getInputStream());
       }
-      return importRows(rows, assignRoundRobin, teamId);
+      if (name.endsWith(".csv") || name.endsWith(".txt") || name.isBlank()) {
+        return parseCsv(file.getInputStream());
+      }
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported file type. Use .csv or .xlsx");
     } catch (ResponseStatusException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -98,7 +139,7 @@ public class LeadImportService {
                 first(row, "display_name", "contact", "contact_name"),
                 first(row, "company_name", "company", "organization"),
                 first(row, "email", "email_id"),
-                first(row, "phone", "mobile", "mobile_number"),
+                ImportColumns.phone(first(row, "phone", "mobile", "mobile_number")),
                 first(row, "source_code", "source", "lead_source"),
                 first(row, "status"),
                 first(row, "priority"),
@@ -135,6 +176,104 @@ public class LeadImportService {
       }
     }
     return new ImportResult(rows.size(), created, skipped, errors.stream().limit(50).toList());
+  }
+
+  private ImportResult importMappedRows(
+      List<Map<String, String>> rows, boolean assignRoundRobin, String teamId, Map<String, String> columnMap) {
+    if (rows.size() > MAX_ROWS) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Max " + MAX_ROWS + " rows per import");
+    }
+    int created = 0;
+    int skipped = 0;
+    List<String> errors = new ArrayList<>();
+    for (int i = 0; i < rows.size(); i++) {
+      Map<String, String> row = rows.get(i);
+      String title = firstNonBlank(mapped(row, columnMap, "title"), mapped(row, columnMap, "displayName"));
+      String phone = ImportColumns.phone(mapped(row, columnMap, "phone"));
+      String email = mapped(row, columnMap, "email");
+      if (title == null) {
+        skipped++;
+        errors.add("row " + (i + 2) + ": missing name");
+        continue;
+      }
+      try {
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        String course = mapped(row, columnMap, "course");
+        if (course != null) {
+          attributes.put("course", course);
+        }
+        LeadUpsert upsert =
+            new LeadUpsert(
+                title,
+                mapped(row, columnMap, "displayName"),
+                null,
+                email,
+                phone,
+                firstNonBlank(mapped(row, columnMap, "source"), "IMPORT"),
+                null,
+                null,
+                null,
+                null,
+                teamId,
+                null,
+                null,
+                null,
+                null,
+                attributes,
+                Map.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        if (leadIdentityService.findOpenMatch(TenantIds.require(), upsert.phone(), upsert.email()).isPresent()) {
+          skipped++;
+          errors.add("row " + (i + 2) + ": matched an existing lead");
+          continue;
+        }
+        leadService.create(upsert, assignRoundRobin);
+        created++;
+      } catch (Exception ex) {
+        skipped++;
+        errors.add("row " + (i + 2) + ": " + ex.getMessage());
+      }
+    }
+    return new ImportResult(rows.size(), created, skipped, errors.stream().limit(50).toList());
+  }
+
+  private static String mapped(Map<String, String> row, Map<String, String> columnMap, String target) {
+    for (Map.Entry<String, String> entry : columnMap.entrySet()) {
+      if (entry.getValue() == null || !entry.getValue().equalsIgnoreCase(target)) {
+        continue;
+      }
+      String value = null;
+      for (Map.Entry<String, String> cell : row.entrySet()) {
+        if (cell.getKey() != null && cell.getKey().trim().equalsIgnoreCase(entry.getKey().trim())) {
+          value = cell.getValue();
+          break;
+        }
+      }
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
+
+  private static String firstNonBlank(String... values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return null;
   }
 
   private static Map<String, Object> extraAttributes(Map<String, String> row) {

@@ -20,7 +20,9 @@ import com.shopmanagement.crmservice.api.CrmLeadApi.LeadResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
 import com.shopmanagement.crmservice.persistence.entity.CrmCampaignEntity;
+import com.shopmanagement.crmservice.persistence.entity.CrmInboundEventEntity;
 import com.shopmanagement.crmservice.persistence.repo.CrmCampaignRepository;
+import com.shopmanagement.crmservice.service.CapturePipe.CaptureResult;
 import com.shopmanagement.crmservice.support.TenantIds;
 
 @Service
@@ -31,14 +33,17 @@ public class CampaignService {
   private final CrmCampaignRepository campaignRepository;
   private final CrmLeadService leadService;
   private final BehaviorScoringService scoringService;
+  private final CapturePipe capturePipe;
 
   public CampaignService(
       CrmCampaignRepository campaignRepository,
       CrmLeadService leadService,
-      BehaviorScoringService scoringService) {
+      BehaviorScoringService scoringService,
+      CapturePipe capturePipe) {
     this.campaignRepository = campaignRepository;
     this.leadService = leadService;
     this.scoringService = scoringService;
+    this.capturePipe = capturePipe;
   }
 
   @Transactional
@@ -98,6 +103,34 @@ public class CampaignService {
 
   @Transactional
   public LeadResponse capturePublic(String publicKey, PublicCaptureRequest body) {
+    return captureTracked(publicKey, body, null, Map.of()).lead();
+  }
+
+  /**
+   * Campaign capture. When an idempotency key is present, a second submit returns the first lead
+   * and does not add another touch. Without a key, this is the existing capture.
+   */
+  @Transactional
+  public CaptureResult captureTracked(
+      String publicKey, PublicCaptureRequest body, String idempotencyKey, Map<String, Object> payload) {
+    CrmCampaignEntity campaign = requireActive(publicKey);
+    if (body.title() == null || body.title().isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title is required");
+    }
+    TenantContextFilter.bindTenant(campaign.getTenantId());
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+      return new CaptureResult(createFromCampaign(campaign, publicKey, body, null, null), false);
+    }
+    return capturePipe.run(
+        campaign.getTenantId(),
+        idempotencyKey,
+        payload,
+        campaign.getId(),
+        null,
+        event -> createFromCampaign(campaign, publicKey, body, idempotencyKey, event));
+  }
+
+  private CrmCampaignEntity requireActive(String publicKey) {
     CrmCampaignEntity campaign =
         campaignRepository
             .findByPublicKeyAndDeletedAtIsNull(publicKey)
@@ -112,10 +145,25 @@ public class CampaignService {
     if (campaign.getEndsAt() != null && now.isAfter(campaign.getEndsAt())) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Campaign has ended");
     }
+    return campaign;
+  }
 
-    TenantContextFilter.bindTenant(campaign.getTenantId());
+  private LeadResponse createFromCampaign(
+      CrmCampaignEntity campaign,
+      String publicKey,
+      PublicCaptureRequest body,
+      String idempotencyKey,
+      CrmInboundEventEntity event) {
     String source =
         firstNonBlank(body.utmSource(), campaign.getUtmSource(), campaign.getChannel(), "CAMPAIGN");
+    Map<String, Object> refs = new LinkedHashMap<>();
+    if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+      String text = idempotencyKey.trim();
+      refs.put("externalId", text.length() <= 128 ? text : text.substring(0, 128));
+    }
+    if (event != null && event.getId() != null) {
+      refs.put("rawEventId", event.getId());
+    }
     LeadResponse lead =
         leadService.create(
             new LeadUpsert(
@@ -135,7 +183,7 @@ public class CampaignService {
                 null,
                 null,
                 body.attributes(),
-                null,
+                refs.isEmpty() ? null : refs,
                 "public-capture",
                 campaign.getId(),
                 firstNonBlank(body.utmSource(), campaign.getUtmSource()),

@@ -142,6 +142,13 @@ public final class CrmLeadApi {
 
   public record ImportResult(int totalRows, int created, int skipped, List<String> errors) {}
 
+  public record ImportPreview(
+      List<String> headers,
+      Map<String, String> suggestedMap,
+      int totalRows,
+      List<Map<String, String>> sampleRows,
+      List<String> errors) {}
+
   public record NoteRequest(@NotBlank String body) {}
 
   public record NoteResponse(

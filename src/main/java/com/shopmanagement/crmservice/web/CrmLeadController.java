@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.shopmanagement.crmservice.api.CrmLeadApi.AssignRequest;
 import com.shopmanagement.crmservice.api.CrmLeadApi.BulkAssignRequest;
+import com.shopmanagement.crmservice.api.CrmLeadApi.ImportPreview;
 import com.shopmanagement.crmservice.api.CrmLeadApi.ImportResult;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.OutcomeRequest;
@@ -188,5 +189,32 @@ public class CrmLeadController {
       @RequestParam(value = "assignRoundRobin", defaultValue = "false") boolean assignRoundRobin,
       @RequestParam(value = "teamId", required = false) String teamId) {
     return importService.importFile(file, assignRoundRobin, teamId);
+  }
+
+  @PostMapping(value = "/imports/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ImportPreview previewImport(@RequestParam("file") MultipartFile file) {
+    return importService.preview(file);
+  }
+
+  @PostMapping(value = "/imports/commit", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ImportResult commitImport(
+      @RequestParam("file") MultipartFile file,
+      @RequestParam(value = "assignRoundRobin", defaultValue = "false") boolean assignRoundRobin,
+      @RequestParam(value = "teamId", required = false) String teamId,
+      @RequestParam(value = "columnMap", required = false) String columnMap) {
+    return importService.importMapped(file, assignRoundRobin, teamId, parseColumnMap(columnMap));
+  }
+
+  private static java.util.Map<String, String> parseColumnMap(String columnMap) {
+    if (columnMap == null || columnMap.isBlank()) {
+      return java.util.Map.of();
+    }
+    try {
+      return new com.fasterxml.jackson.databind.ObjectMapper()
+          .readValue(columnMap, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, String>>() {});
+    } catch (Exception ex) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, "columnMap must be a JSON object");
+    }
   }
 }

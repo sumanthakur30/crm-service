@@ -72,6 +72,13 @@ public class LeadCaptureService {
 
   @Transactional
   public void recordNew(CrmLeadEntity lead, LeadUpsert body) {
+    Long branchId = branchOf(body);
+    if (branchId != null && lead.getBranchId() == null) {
+      lead.setBranchId(branchId);
+      if (lead.getId() != null) {
+        leadRepository.save(lead);
+      }
+    }
     boolean education = educationTenant(lead.getTenantId());
     linkContact(lead, education);
     storeCourse(lead);
@@ -206,7 +213,9 @@ public class LeadCaptureService {
     touch.setProvider(provider);
     touch.setExternalId(externalId);
     touch.setCampaignId(repeat && body != null && body.campaignId() != null ? body.campaignId() : lead.getCampaignId());
-    touch.setBranchId(lead.getBranchId());
+    Long branchId = branchOf(body);
+    touch.setBranchId(branchId != null ? branchId : lead.getBranchId());
+    touch.setRawEventId(rawEventId(body));
     Instant now = Instant.now();
     touch.setOccurredAt(now);
     touch.setReceivedAt(now);
@@ -214,8 +223,23 @@ public class LeadCaptureService {
     if (course == null) {
       course = courseOf(lead);
     }
+    Map<String, Object> values = new LinkedHashMap<>();
     if (course != null) {
-      touch.setFieldValues(new LinkedHashMap<>(Map.of("course", course)));
+      values.put("course", course);
+    }
+    if (body != null && body.attributes() != null) {
+      for (Map.Entry<String, Object> entry : body.attributes().entrySet()) {
+        if (entry.getValue() == null || "branchId".equals(entry.getKey()) || "phoneRaw".equals(entry.getKey())) {
+          continue;
+        }
+        if ("course".equals(entry.getKey())) {
+          continue;
+        }
+        values.put(entry.getKey(), entry.getValue());
+      }
+    }
+    if (!values.isEmpty()) {
+      touch.setFieldValues(values);
     }
     try {
       touch = touchRepository.save(touch);
@@ -250,6 +274,35 @@ public class LeadCaptureService {
         .map(CrmWorkspaceEntity::getTemplateCode)
         .map(code -> "EDUCATION".equalsIgnoreCase(code))
         .orElse(false);
+  }
+
+  private static Long branchOf(LeadUpsert body) {
+    if (body == null || body.attributes() == null) {
+      return null;
+    }
+    return asLong(body.attributes().get("branchId"));
+  }
+
+  private static Long rawEventId(LeadUpsert body) {
+    if (body == null || body.externalRefs() == null) {
+      return null;
+    }
+    return asLong(body.externalRefs().get("rawEventId"));
+  }
+
+  private static Long asLong(Object value) {
+    if (value instanceof Number number) {
+      return number.longValue();
+    }
+    if (value == null) {
+      return null;
+    }
+    try {
+      String text = String.valueOf(value).trim();
+      return text.isEmpty() ? null : Long.parseLong(text);
+    } catch (NumberFormatException ex) {
+      return null;
+    }
   }
 
   private static String courseOf(LeadUpsert body) {
