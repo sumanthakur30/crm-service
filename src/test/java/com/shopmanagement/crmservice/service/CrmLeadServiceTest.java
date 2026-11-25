@@ -2,6 +2,9 @@ package com.shopmanagement.crmservice.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,9 +15,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.filter.TenantContextFilter;
@@ -41,12 +44,34 @@ class CrmLeadServiceTest {
   @Mock private CrmRecordScopeService recordScopeService;
   @Mock private ScoreBandService scoreBandService;
   @Mock private FollowUpTaskService followUpTaskService;
+  @Mock private LeadIdentityService leadIdentityService;
+  @Mock private ObjectProvider<AssignmentService> assignmentProvider;
+  @Mock private AssignmentService assignmentService;
 
-  @InjectMocks private CrmLeadService leadService;
+  private CrmLeadService leadService;
 
   @BeforeEach
   void bindTenant() {
     TenantContextFilter.bindTenantForTests("tenant-demo");
+    leadService =
+        new CrmLeadService(
+            leadRepository,
+            pipelineRepository,
+            stageRepository,
+            campaignRepository,
+            accountRepository,
+            contactRepository,
+            workspaceBootstrapService,
+            timelineService,
+            stageAutomationService,
+            recordScopeService,
+            scoreBandService,
+            followUpTaskService,
+            leadIdentityService,
+            assignmentProvider);
+    lenient().when(leadIdentityService.findOpenMatch(any(), any(), any())).thenReturn(Optional.empty());
+    lenient().when(assignmentProvider.getObject()).thenReturn(assignmentService);
+    lenient().when(assignmentService.tryRoundRobin(anyLong())).thenReturn(null);
   }
 
   @AfterEach
@@ -118,6 +143,52 @@ class CrmLeadServiceTest {
     ArgumentCaptor<CrmLeadEntity> captor = ArgumentCaptor.forClass(CrmLeadEntity.class);
     verify(leadRepository).save(captor.capture());
     assertThat(captor.getValue().getTenantId()).isEqualTo("tenant-demo");
+    assertThat(captor.getValue().getOwnerUserId()).isNull();
+  }
+
+  @Test
+  void create_matchingPhoneDoesNotInsertAnotherLead() {
+    CrmLeadEntity existing = new CrmLeadEntity();
+    existing.setId(7L);
+    existing.setTenantId("tenant-demo");
+    existing.setTitle("Existing");
+    existing.setPhone("9999999999");
+    existing.setStatus("OPEN");
+    when(leadIdentityService.findOpenMatch(any(), any(), any())).thenReturn(Optional.of(existing));
+
+    var response =
+        leadService.create(
+            new LeadUpsert(
+                "Second enquiry",
+                "Ravi",
+                null,
+                "ravi@acme.test",
+                "+91 99999 99999",
+                "META",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                MapAttrs.empty(),
+                MapAttrs.empty(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
+
+    assertThat(response.id()).isEqualTo(7L);
+    verify(leadRepository, never()).save(any());
+    verify(assignmentService, never()).tryRoundRobin(anyLong());
   }
 
   /** Tiny helper so test constructors stay readable. */

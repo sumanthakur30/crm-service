@@ -75,4 +75,12 @@ class CrmRecordScopeServiceTest {
     assertEquals(CrmAccessScope.ORG, service.resolveScope());
     service.assertCanAccess("anyone", null);
   }
+
+  @Test
+  void salesRoleStaysOwnEvenIfHeaderSaysOrg() {
+    TenantContextFilter.bindAuthRoleForTests("SALES");
+    TenantContextFilter.bindAccessScopeForTests("ORG");
+    assertEquals(CrmAccessScope.OWN, service.resolveScope());
+    assertThrows(ResponseStatusException.class, () -> service.assertCanAccess("bob", "DEFAULT"));
+  }
 }

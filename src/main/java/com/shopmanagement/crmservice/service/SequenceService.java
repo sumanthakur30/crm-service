@@ -351,6 +351,13 @@ public class SequenceService {
     enr.setLastError(null);
 
     String delStatus = String.valueOf(delivery.getOrDefault("status", "UNKNOWN"));
+    if ("SKIPPED_DISABLED".equalsIgnoreCase(delStatus) || "ERROR".equalsIgnoreCase(delStatus)) {
+      enr.setStatus("FAILED");
+      enr.setLastError(delStatus);
+      enr.touch();
+      enrollmentRepository.save(enr);
+      return false;
+    }
     String eventType = "ERROR".equalsIgnoreCase(delStatus) ? "MESSAGE_FAILED" : "MESSAGE_QUEUED";
     if (enr.getLeadId() != null) {
       timelineService.recordEvent(

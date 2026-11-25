@@ -95,6 +95,16 @@ class InboundHmacVerifierTest {
   }
 
   @Test
+  void secretRequiresSignatureEvenWhenFlagIsOff() {
+    CrmInboundProperties props = new CrmInboundProperties();
+    props.setSigningEnabled(false);
+    props.setHmacSecret("test-secret");
+    InboundSignatureGuard guard = new InboundSignatureGuard(props, new ObjectMapper());
+    HttpServletRequest req = new MockHttpServletRequest();
+    assertThrows(InboundSignatureException.class, () -> guard.verifyIfRequired(req, Map.of("name", "Ada")));
+  }
+
+  @Test
   void guardAcceptsValidCanonicalJsonWhenNoRawCache() throws Exception {
     CrmInboundProperties props = new CrmInboundProperties();
     props.setSigningEnabled(true);

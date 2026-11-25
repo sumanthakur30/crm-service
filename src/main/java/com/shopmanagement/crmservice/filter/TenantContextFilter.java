@@ -118,6 +118,16 @@ public class TenantContextFilter extends OncePerRequestFilter {
   }
 
   /** Test hook — do not use in production request paths. */
+  public static void bindAuthRoleForTests(String role) {
+    CURRENT_AUTH_ROLE.set(role);
+  }
+
+  /** Test hook — do not use in production request paths. */
+  public static void bindAccessScopeForTests(String scope) {
+    CURRENT_ACCESS_SCOPE.set(scope);
+  }
+
+  /** Test hook — do not use in production request paths. */
   public static void clearTenantForTests() {
     CURRENT_TENANT.remove();
     CURRENT_SHOP.remove();

@@ -18,14 +18,14 @@ import com.shopmanagement.crmservice.support.TenantIds;
 /**
  * Own / Team / Org record scoping for CRM objects that carry {@code ownerUserId} / {@code teamId}.
  *
- * <p>Resolution order when {@code crm.security.record-scope-enabled=true}:
- *
- * <ol>
- *   <li>{@code X-Crm-Access-Scope} header (ORG|TEAM|OWN)
- *   <li>Derived from {@code X-Auth-Role} (owner/admin → ORG, manager → TEAM, else OWN)
- *   <li>{@code crm.security.default-scope}
- * </ol>
- */
+   * <p>Resolution order when {@code crm.security.record-scope-enabled=true}:
+   *
+   * <ol>
+   *   <li>Derived from {@code X-Auth-Role} when the role maps (a sales user cannot widen this with a header)
+   *   <li>{@code X-Crm-Access-Scope} only when the role does not map
+   *   <li>{@code crm.security.default-scope}
+   * </ol>
+   */
 @Component
 public class CrmRecordScopeService {
 
@@ -46,14 +46,14 @@ public class CrmRecordScopeService {
     if (!properties.isRecordScopeEnabled()) {
       return CrmAccessScope.ORG;
     }
-    String header = TenantContextFilter.getCurrentAccessScope();
-    if (header != null && !header.isBlank()) {
-      return CrmAccessScope.parse(header);
-    }
     String role = TenantContextFilter.getCurrentAuthRole();
     CrmAccessScope fromRole = scopeFromRole(role);
     if (fromRole != null) {
       return fromRole;
+    }
+    String header = TenantContextFilter.getCurrentAccessScope();
+    if (header != null && !header.isBlank()) {
+      return CrmAccessScope.parse(header);
     }
     return CrmAccessScope.parse(properties.getDefaultScope());
   }

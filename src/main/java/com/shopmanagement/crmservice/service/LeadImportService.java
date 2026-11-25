@@ -27,11 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.shopmanagement.crmservice.api.CrmLeadApi.AssignRequest;
 import com.shopmanagement.crmservice.api.CrmLeadApi.ImportResult;
-import com.shopmanagement.crmservice.api.CrmLeadApi.LeadResponse;
 import com.shopmanagement.crmservice.api.CrmLeadApi.LeadUpsert;
 import com.shopmanagement.crmservice.entitlement.CrmEntitlementGuard;
+import com.shopmanagement.crmservice.support.TenantIds;
 
 @Service
 public class LeadImportService {
@@ -39,15 +38,15 @@ public class LeadImportService {
   private static final int MAX_ROWS = 5000;
 
   private final CrmLeadService leadService;
-  private final AssignmentService assignmentService;
+  private final LeadIdentityService leadIdentityService;
   private final CrmEntitlementGuard entitlementGuard;
 
   public LeadImportService(
       CrmLeadService leadService,
-      AssignmentService assignmentService,
+      LeadIdentityService leadIdentityService,
       CrmEntitlementGuard entitlementGuard) {
     this.leadService = leadService;
-    this.assignmentService = assignmentService;
+    this.leadIdentityService = leadIdentityService;
     this.entitlementGuard = entitlementGuard;
   }
 
@@ -121,11 +120,14 @@ public class LeadImportService {
                 first(row, "utm_term"),
                 parseLong(first(row, "account_id")),
                 parseLong(first(row, "contact_id")));
-        LeadResponse lead = leadService.create(upsert);
-        if (assignRoundRobin) {
-          assignmentService.assign(
-              lead.id(), new AssignRequest("ROUND_ROBIN", null, blankOr(teamId, lead.teamId())));
+        if (leadIdentityService
+            .findOpenMatch(TenantIds.require(), upsert.phone(), upsert.email())
+            .isPresent()) {
+          skipped++;
+          errors.add("row " + (i + 2) + ": matched an existing lead");
+          continue;
         }
+        leadService.create(upsert, assignRoundRobin);
         created++;
       } catch (Exception ex) {
         skipped++;
@@ -133,10 +135,6 @@ public class LeadImportService {
       }
     }
     return new ImportResult(rows.size(), created, skipped, errors.stream().limit(50).toList());
-  }
-
-  private static String blankOr(String value, String fallback) {
-    return value == null || value.isBlank() ? fallback : value.trim();
   }
 
   private static Map<String, Object> extraAttributes(Map<String, String> row) {

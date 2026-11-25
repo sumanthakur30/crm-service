@@ -5,8 +5,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -48,6 +50,8 @@ public class CrmLeadService {
   private final CrmRecordScopeService recordScopeService;
   private final ScoreBandService scoreBandService;
   private final FollowUpTaskService followUpTaskService;
+  private final LeadIdentityService leadIdentityService;
+  private final ObjectProvider<AssignmentService> assignmentService;
 
   public CrmLeadService(
       CrmLeadRepository leadRepository,
@@ -61,7 +65,9 @@ public class CrmLeadService {
       StageAutomationService stageAutomationService,
       CrmRecordScopeService recordScopeService,
       ScoreBandService scoreBandService,
-      FollowUpTaskService followUpTaskService) {
+      FollowUpTaskService followUpTaskService,
+      LeadIdentityService leadIdentityService,
+      ObjectProvider<AssignmentService> assignmentService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
@@ -74,20 +80,44 @@ public class CrmLeadService {
     this.recordScopeService = recordScopeService;
     this.scoreBandService = scoreBandService;
     this.followUpTaskService = followUpTaskService;
+    this.leadIdentityService = leadIdentityService;
+    this.assignmentService = assignmentService;
   }
 
   @Transactional
   public LeadResponse create(LeadUpsert body) {
+    return create(body, true);
+  }
+
+  /**
+   * @param roundRobinIfUnowned when the body has no owner, assign the next team member, or leave
+   *     the lead unassigned if the team is empty. Never defaults the owner to the caller, so a
+   *     webhook user does not become the counsellor.
+   */
+  @Transactional
+  public LeadResponse create(LeadUpsert body, boolean roundRobinIfUnowned) {
     String tenantId = TenantIds.require();
+    Optional<CrmLeadEntity> existing =
+        leadIdentityService.findOpenMatch(tenantId, body.phone(), body.email());
+    if (existing.isPresent()) {
+      CrmLeadEntity match = existing.get();
+      timelineService.recordEvent(
+          "LEAD",
+          match.getId(),
+          "DUPLICATE_ENQUIRY",
+          "Another enquiry matched this lead (" + LeadIdentityService.sourceLabel(body.sourceCode()) + ")",
+          Map.of(
+              "sourceCode", body.sourceCode() == null ? "" : body.sourceCode(),
+              "phone", body.phone() == null ? "" : body.phone(),
+              "email", body.email() == null ? "" : body.email()));
+      return toResponse(match);
+    }
     CrmPipelineEntity pipeline = resolvePipeline(tenantId, body.pipelineId());
     CrmStageEntity stage = resolveStage(tenantId, pipeline.getId(), body.stageId());
 
     CrmLeadEntity lead = new CrmLeadEntity();
     lead.setTenantId(tenantId);
     apply(lead, body, pipeline.getId(), stage.getId(), true);
-    if (lead.getOwnerUserId() == null) {
-      lead.setOwnerUserId(TenantIds.currentUserOrNull());
-    }
     lead = leadRepository.save(lead);
     followUpTaskService.syncLead(lead);
     timelineService.recordEvent(
@@ -96,6 +126,12 @@ public class CrmLeadService {
         "LEAD_CREATED",
         "Lead created: " + lead.getTitle(),
         Map.of("stageId", lead.getStageId(), "status", lead.getStatus()));
+    if (roundRobinIfUnowned && (lead.getOwnerUserId() == null || lead.getOwnerUserId().isBlank())) {
+      LeadResponse assigned = assignmentService.getObject().tryRoundRobin(lead.getId());
+      if (assigned != null) {
+        return assigned;
+      }
+    }
     return toResponse(lead);
   }
 

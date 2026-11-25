@@ -18,6 +18,11 @@ public class CrmInboundProperties {
     return signingEnabled;
   }
 
+  /** Signing flag, or a configured secret. A secret with verification off would accept forged leads. */
+  public boolean isSignatureRequired() {
+    return signingEnabled || (hmacSecret != null && !hmacSecret.isBlank());
+  }
+
   public void setSigningEnabled(boolean signingEnabled) {
     this.signingEnabled = signingEnabled;
   }

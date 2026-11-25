@@ -27,7 +27,7 @@ public class InboundSignatureGuard {
   }
 
   public void verifyIfRequired(HttpServletRequest request, Map<String, Object> payload) {
-    if (!properties.isSigningEnabled()) {
+    if (!properties.isSignatureRequired()) {
       return;
     }
     String secret = properties.getHmacSecret();

@@ -22,6 +22,8 @@ public interface CrmLeadRepository extends JpaRepository<CrmLeadEntity, Long> {
 
   List<CrmLeadEntity> findByTenantIdAndEmailAndDeletedAtIsNull(String tenantId, String email);
 
+  List<CrmLeadEntity> findByTenantIdAndEmailIgnoreCaseAndDeletedAtIsNull(String tenantId, String email);
+
   List<CrmLeadEntity> findByTenantIdAndAccountIdAndDeletedAtIsNull(String tenantId, Long accountId);
 
   long countByTenantIdAndOwnerUserIdAndStatusAndDeletedAtIsNull(

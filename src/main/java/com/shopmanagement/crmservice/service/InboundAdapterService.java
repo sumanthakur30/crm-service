@@ -111,8 +111,6 @@ public class InboundAdapterService {
       event.setProcessedAt(Instant.now());
       inboundRepository.save(event);
       throw ex;
-    } finally {
-      TenantContextFilter.clearTenantForTests();
     }
   }
 

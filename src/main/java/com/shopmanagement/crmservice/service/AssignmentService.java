@@ -148,6 +148,22 @@ public class AssignmentService {
     return leadService.get(leadId);
   }
 
+  /**
+   * Round-robin when the team has members. Returns null when the team is empty so create can leave
+   * the lead unassigned instead of failing the insert.
+   */
+  @Transactional
+  public LeadResponse tryRoundRobin(Long leadId) {
+    try {
+      return assign(leadId, new AssignRequest("ROUND_ROBIN", null, null));
+    } catch (ResponseStatusException ex) {
+      if (ex.getStatusCode().value() == HttpStatus.BAD_REQUEST.value()) {
+        return null;
+      }
+      throw ex;
+    }
+  }
+
   private String nextRoundRobinOwner(
       String tenantId, String teamId, List<CrmTeamMemberEntity> poolOverride) {
     List<CrmTeamMemberEntity> members =
