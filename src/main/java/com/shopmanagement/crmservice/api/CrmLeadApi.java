@@ -78,7 +78,8 @@ public final class CrmLeadApi {
       Instant createdAt,
       Instant updatedAt,
       Long branchId,
-      Instant firstResponseAt) {}
+      Instant firstResponseAt,
+      String enquiryNo) {}
 
   public record BulkAssignRequest(java.util.List<Long> leadIds, String mode, String ownerUserId, String teamId) {}
 

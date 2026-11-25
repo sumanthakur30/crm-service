@@ -306,7 +306,7 @@ public class LeadCaptureService {
     return workspaceRepository
         .findByTenantIdAndDeletedAtIsNull(tenantId)
         .map(CrmWorkspaceEntity::getTemplateCode)
-        .map(code -> "EDUCATION".equalsIgnoreCase(code))
+        .map(code -> "EDUCATION".equalsIgnoreCase(code) || "ADMISSION_CONSULTANCY".equalsIgnoreCase(code))
         .orElse(false);
   }
 

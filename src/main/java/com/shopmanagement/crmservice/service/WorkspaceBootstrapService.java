@@ -30,18 +30,21 @@ public class WorkspaceBootstrapService {
   private final CrmStageRepository stageRepository;
   private final IndustryTemplateLoader templateLoader;
   private final EducationPackService educationPackService;
+  private final ConsultancyPackService consultancyPackService;
 
   public WorkspaceBootstrapService(
       CrmWorkspaceRepository workspaceRepository,
       CrmPipelineRepository pipelineRepository,
       CrmStageRepository stageRepository,
       IndustryTemplateLoader templateLoader,
-      EducationPackService educationPackService) {
+      EducationPackService educationPackService,
+      ConsultancyPackService consultancyPackService) {
     this.workspaceRepository = workspaceRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
     this.templateLoader = templateLoader;
     this.educationPackService = educationPackService;
+    this.consultancyPackService = consultancyPackService;
   }
 
   @Transactional
@@ -73,6 +76,7 @@ public class WorkspaceBootstrapService {
         .orElseGet(() -> createPipelineFromSpec(tenantId, template.opportunityPipeline(), "OPPORTUNITY", false, 20));
 
     educationPackService.ensure(tenantId);
+    consultancyPackService.ensure(tenantId);
     return toResponse(workspace, leadPipeline.getId());
   }
 

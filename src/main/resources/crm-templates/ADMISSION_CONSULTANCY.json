@@ -1,0 +1,25 @@
+{
+  "code": "ADMISSION_CONSULTANCY",
+  "name": "Admission consultancy",
+  "leadPipeline": {
+    "code": "COUNSELLING",
+    "name": "Counselling",
+    "stages": [
+      { "code": "NEW", "name": "New enquiry", "sortOrder": 10, "probability": 10 },
+      { "code": "CONTACTED", "name": "Contacted", "sortOrder": 20, "probability": 25, "contacted": true },
+      { "code": "INTERESTED", "name": "Interested", "sortOrder": 30, "probability": 45, "contacted": true },
+      { "code": "APPLIED", "name": "Applied", "sortOrder": 40, "probability": 70, "contacted": true, "application": true },
+      { "code": "ADMITTED", "name": "Admitted", "sortOrder": 50, "probability": 100, "won": true, "contacted": true, "application": true, "qualified": true },
+      { "code": "LOST", "name": "Lost", "sortOrder": 60, "probability": 0, "lost": true }
+    ]
+  },
+  "opportunityPipeline": {
+    "code": "COUNSELLING_DEAL",
+    "name": "Counselling deal",
+    "stages": [
+      { "code": "OPEN", "name": "Open", "sortOrder": 10, "probability": 20 },
+      { "code": "WON", "name": "Won", "sortOrder": 20, "probability": 100, "won": true },
+      { "code": "LOST", "name": "Lost", "sortOrder": 30, "probability": 0, "lost": true }
+    ]
+  }
+}

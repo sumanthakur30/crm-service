@@ -42,14 +42,17 @@ public class LeadImportService {
   private final CrmLeadService leadService;
   private final LeadIdentityService leadIdentityService;
   private final CrmEntitlementGuard entitlementGuard;
+  private final ConsultancyPackService consultancyPackService;
 
   public LeadImportService(
       CrmLeadService leadService,
       LeadIdentityService leadIdentityService,
-      CrmEntitlementGuard entitlementGuard) {
+      CrmEntitlementGuard entitlementGuard,
+      ConsultancyPackService consultancyPackService) {
     this.leadService = leadService;
     this.leadIdentityService = leadIdentityService;
     this.entitlementGuard = entitlementGuard;
+    this.consultancyPackService = consultancyPackService;
   }
 
   @Transactional
@@ -58,7 +61,7 @@ public class LeadImportService {
     if (file == null || file.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is required");
     }
-    return importRows(loadRows(file), assignRoundRobin, teamId);
+    return finishImport(file, importRows(loadRows(file), assignRoundRobin, teamId));
   }
 
   @Transactional(readOnly = true)
@@ -91,9 +94,16 @@ public class LeadImportService {
     entitlementGuard.requireCrmAccess();
     List<Map<String, String>> rows = loadRows(file);
     if (columnMap == null || columnMap.isEmpty()) {
-      return importRows(rows, assignRoundRobin, teamId);
+      return finishImport(file, importRows(rows, assignRoundRobin, teamId));
     }
-    return importMappedRows(rows, assignRoundRobin, teamId, columnMap);
+    return finishImport(file, importMappedRows(rows, assignRoundRobin, teamId, columnMap));
+  }
+
+  private ImportResult finishImport(MultipartFile file, ImportResult result) {
+    String label = file == null || file.getOriginalFilename() == null ? "import" : file.getOriginalFilename();
+    consultancyPackService.recordImport(
+        TenantIds.require(), label, result.totalRows(), result.created(), result.skipped());
+    return result;
   }
 
   private List<Map<String, String>> loadRows(MultipartFile file) {

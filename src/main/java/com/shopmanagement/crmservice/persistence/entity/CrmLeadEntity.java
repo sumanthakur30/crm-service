@@ -121,4 +121,7 @@ public class CrmLeadEntity extends TenantAuditableEntity {
 
   @Column(name = "first_response_at")
   private Instant firstResponseAt;
+
+  @Column(name = "enquiry_no", length = 32)
+  private String enquiryNo;
 }

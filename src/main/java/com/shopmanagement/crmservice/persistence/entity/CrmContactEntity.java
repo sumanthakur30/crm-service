@@ -58,6 +58,9 @@ public class CrmContactEntity extends TenantAuditableEntity {
   @Column(name = "email_normalized", length = 256)
   private String emailNormalized;
 
+  @Column(name = "student_code", length = 32)
+  private String studentCode;
+
   @Column(length = 128)
   private String city;
 

@@ -49,6 +49,7 @@ class CrmLeadServiceTest {
   @Mock private ObjectProvider<AssignmentService> assignmentProvider;
   @Mock private AssignmentService assignmentService;
   @Mock private LeadCaptureService leadCaptureService;
+  @Mock private ConsultancyPackService consultancyPackService;
 
   private CrmLeadService leadService;
 
@@ -71,10 +72,13 @@ class CrmLeadServiceTest {
             followUpTaskService,
             leadIdentityService,
             assignmentProvider,
-            leadCaptureService);
+            leadCaptureService,
+            consultancyPackService);
     lenient().when(leadIdentityService.findOpenMatch(any(), any(), any())).thenReturn(Optional.empty());
     lenient().when(assignmentProvider.getObject()).thenReturn(assignmentService);
     lenient().when(assignmentService.tryRoundRobin(anyLong())).thenReturn(null);
+    lenient().when(consultancyPackService.newEnquiryOnRepeat(any())).thenReturn(false);
+    lenient().when(consultancyPackService.ruleOwner(any(), any(), any(), any())).thenReturn(Optional.empty());
   }
 
   @AfterEach

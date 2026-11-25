@@ -53,6 +53,7 @@ public class CrmLeadService {
   private final LeadIdentityService leadIdentityService;
   private final ObjectProvider<AssignmentService> assignmentService;
   private final LeadCaptureService leadCaptureService;
+  private final ConsultancyPackService consultancyPackService;
 
   public CrmLeadService(
       CrmLeadRepository leadRepository,
@@ -69,7 +70,8 @@ public class CrmLeadService {
       FollowUpTaskService followUpTaskService,
       LeadIdentityService leadIdentityService,
       ObjectProvider<AssignmentService> assignmentService,
-      LeadCaptureService leadCaptureService) {
+      LeadCaptureService leadCaptureService,
+      ConsultancyPackService consultancyPackService) {
     this.leadRepository = leadRepository;
     this.pipelineRepository = pipelineRepository;
     this.stageRepository = stageRepository;
@@ -85,6 +87,7 @@ public class CrmLeadService {
     this.leadIdentityService = leadIdentityService;
     this.assignmentService = assignmentService;
     this.leadCaptureService = leadCaptureService;
+    this.consultancyPackService = consultancyPackService;
   }
 
   @Transactional
@@ -102,7 +105,11 @@ public class CrmLeadService {
     String tenantId = TenantIds.require();
     Optional<CrmLeadEntity> existing =
         leadIdentityService.findOpenMatch(tenantId, body.phone(), body.email());
-    if (existing.isPresent()) {
+    boolean anotherEnquiry = existing.isPresent() && consultancyPackService.newEnquiryOnRepeat(tenantId);
+    Long sameStudent = anotherEnquiry ? existing.get().getContactId() : null;
+    String previousOwner =
+        anotherEnquiry && consultancyPackService.keepPreviousOwner(tenantId) ? existing.get().getOwnerUserId() : null;
+    if (existing.isPresent() && !anotherEnquiry) {
       CrmLeadEntity match = existing.get();
       timelineService.recordEvent(
           "LEAD",
@@ -122,7 +129,24 @@ public class CrmLeadService {
     CrmLeadEntity lead = new CrmLeadEntity();
     lead.setTenantId(tenantId);
     apply(lead, body, pipeline.getId(), stage.getId(), true);
+    if (anotherEnquiry) {
+      if (lead.getContactId() == null) {
+        lead.setContactId(sameStudent);
+      }
+      if ((lead.getOwnerUserId() == null || lead.getOwnerUserId().isBlank()) && previousOwner != null) {
+        lead.setOwnerUserId(previousOwner);
+      }
+    } else if (lead.getOwnerUserId() == null || lead.getOwnerUserId().isBlank()) {
+      String ruled =
+          consultancyPackService
+              .ruleOwner(tenantId, body.sourceCode(), attribute(body, "course"), attribute(body, "city"))
+              .orElse(null);
+      if (ruled != null) {
+        lead.setOwnerUserId(ruled);
+      }
+    }
     lead = leadRepository.save(lead);
+    consultancyPackService.stampEnquiry(lead);
     followUpTaskService.syncLead(lead);
     timelineService.recordEvent(
         "LEAD",
@@ -131,6 +155,7 @@ public class CrmLeadService {
         "Lead created: " + lead.getTitle(),
         Map.of("stageId", lead.getStageId(), "status", lead.getStatus()));
     leadCaptureService.recordNew(lead, body);
+    consultancyPackService.stampStudent(tenantId, lead.getContactId());
     if (roundRobinIfUnowned && (lead.getOwnerUserId() == null || lead.getOwnerUserId().isBlank())) {
       LeadResponse assigned = assignmentService.getObject().tryRoundRobin(lead.getId());
       if (assigned != null) {
@@ -467,6 +492,15 @@ public class CrmLeadService {
         lead.getCreatedAt(),
         lead.getUpdatedAt(),
         lead.getBranchId(),
-        lead.getFirstResponseAt());
+        lead.getFirstResponseAt(),
+        lead.getEnquiryNo());
+  }
+
+  private static String attribute(LeadUpsert body, String key) {
+    if (body.attributes() == null || body.attributes().get(key) == null) {
+      return null;
+    }
+    String value = String.valueOf(body.attributes().get(key)).trim();
+    return value.isEmpty() ? null : value;
   }
 }
